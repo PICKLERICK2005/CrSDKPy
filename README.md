@@ -2,7 +2,7 @@
 
 CrSDKPy is intended to become a cross-platform Python interface/wrapper for
 Sony Camera Remote SDK (CRSDK). It is an independent community project and is
-currently at a very early bootstrap stage: version `0.0.1` exposes only the
+currently at a very early bootstrap stage: version `0.0.1a1` exposes only the
 package version and does not yet provide camera-control functionality.
 
 ## Sony Camera Remote SDK dependency
