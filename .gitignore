@@ -15,6 +15,15 @@ build/
 dist/
 *.egg-info/
 
+# Native compiler and linker artifacts
+*.obj
+*.o
+*.exe
+*.pdb
+*.ilk
+*.lib
+*.exp
+
 # Coverage
 .coverage
 htmlcov/
