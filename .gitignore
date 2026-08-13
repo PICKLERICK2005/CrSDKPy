@@ -31,3 +31,15 @@ CrSDK_v*.zip
 *.dll
 *.dylib
 *.so
+
+# Local characterization and exploratory work
+#
+# These directories are intentionally excluded from the repository. Promote
+# reviewed, reusable code into src/, tests/, docs/, or examples/ explicitly.
+/characterization/
+/scratch/
+/scripts/
+/test_scripts/
+/probes/
+/captures/
+/artifacts/
