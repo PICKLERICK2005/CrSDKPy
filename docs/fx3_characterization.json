@@ -1,0 +1,594 @@
+{
+  "meta": {
+    "hardware": "Sony ILME-FX3A",
+    "sdk_version": "2.02.00",
+    "sdk_build_date": "20260610a",
+    "transport": "USB",
+    "usb_driver": "libusbK (srcameradriver.inf, amd64)",
+    "host_os": "Windows 11",
+    "host_python": "3.13",
+    "host_compiler": "MSVC 2022",
+    "date": "2026-08-13",
+    "phase": "0-2 complete + AF/MF + control mode matrix",
+    "confidence_note": "All measurements marked 'measured' were taken on hardware during this session. Values marked 'inferred' or 'doc-only' come from SDK headers or documentation only."
+  },
+
+  "phase0_baseline": {
+    "sdk_version_string": "2.02.00",
+    "sdk_raw_version_hex": "TBD_from_probe0_output",
+    "sdk_serial_hex": "TBD_from_probe0_output",
+    "camera_model_enum": "CrCameraDeviceModel_ILME_FX3A",
+    "camera_model_string": "ILME-FX3A",
+    "usb_pid_hex": "0x0F52",
+    "usb_adaptor": "Cr_PTP_USB",
+    "enum_camera_objects_timeout_s": 3,
+    "device_property_count_remote": 394,
+    "device_property_count_remote_transfer": 392,
+    "property_count_note": "Two extra codes in Remote (0x581, 0x582) correspond to live-view properties. Property count must not be used as a health assertion.",
+    "confidence": "measured"
+  },
+
+  "phase1_capture": {
+    "trigger_command": "CrCommandId_S1andRelease (Down then Up)",
+    "trigger_to_capture_event_ms": {
+      "min": 380,
+      "max": 435,
+      "typical": 405,
+      "unit": "ms",
+      "confidence": "measured"
+    },
+    "trigger_to_content_in_index_ms": {
+      "min": 816,
+      "max": 851,
+      "unit": "ms",
+      "confidence": "measured"
+    }
+  },
+
+  "phase1_autofocus": {
+    "s1_control": {
+      "type": "device_property",
+      "api": "SetDeviceProperty(S1_property, Locked/Unlocked)",
+      "note": "S1 = half-press/AF. Distinct from S2. SetDeviceProperty, not SendCommand."
+    },
+    "s2_control": {
+      "type": "command",
+      "api": "SendCommand(CrCommandId_Release, Down/Up)",
+      "note": "S2 = full release only. Does NOT assert S1/AF. In AF mode with only S2, SDK returns success but no exposure occurs."
+    },
+    "s1_and_release_command": {
+      "api": "SendCommand(CrCommandId_S1andRelease, Down/Up)",
+      "behavior": "Combines S1+S2 in one SDK call. Ungated — exposure committed without caller inspection of focus state.",
+      "recommended": false,
+      "note": "Use explicit S1-gated flow instead. S1andRelease appropriate only as low-level escape hatch."
+    },
+    "focus_indication_states": {
+      "success_states": ["Focused_AF_S", "Focused_AF_C"],
+      "in_progress_states": ["TrackingSubject_AF_C"],
+      "failure_states": ["NotFocused_AF_S"],
+      "unlocked": "Unlocked",
+      "note": "TrackingSubject_AF_C must never gate S2."
+    },
+    "af_status_warning_channel": {
+      "callback": "OnWarningExt",
+      "code_hex": "0x60001",
+      "name": "CrWarningExt_AFStatus",
+      "note": "Second AF-state channel independent of FocusIndication property. Either may lead; no fixed ordering. Both must be subscribed. First valid Focused_* from either wins.",
+      "confidence": "measured"
+    },
+    "afs_timing_good_lock": {
+      "s1_to_focused_ms": { "min": 169, "max": 200, "unit": "ms", "confidence": "measured" },
+      "s1_to_captured_event_ms": { "min": 604, "max": 633, "unit": "ms", "confidence": "measured" },
+      "s1_to_content_available_ms": { "min": 1064, "max": 1170, "unit": "ms", "confidence": "measured" },
+      "s1_to_screennail_complete_ms": { "min": 1130, "max": 1236, "unit": "ms", "confidence": "measured" }
+    },
+    "afs_timing_no_lock": {
+      "s1_to_not_focused_ms": { "observed": 731, "unit": "ms", "confidence": "measured" },
+      "s2_issued": false,
+      "content_created": false
+    },
+    "afc_timing": {
+      "s1_to_tracking_subject_ms": { "observed": 122, "unit": "ms", "confidence": "measured" },
+      "s1_to_focused_afc_ms": { "observed": 183, "unit": "ms", "confidence": "measured" },
+      "s1_to_captured_event_ms": { "observed": 617, "unit": "ms", "confidence": "measured" },
+      "note": "TrackingSubject_AF_C led Focused_AF_C by ~61ms in this run."
+    },
+    "s1andrelease_timing": {
+      "to_focused_property_ms": { "observed": 181, "unit": "ms", "confidence": "measured" },
+      "to_focused_af_status_ms": { "observed": 196, "unit": "ms", "confidence": "measured" },
+      "to_captured_event_ms": { "observed": 633, "unit": "ms", "confidence": "measured" }
+    },
+    "s1_cleanup_semantics": {
+      "after_successful_capture": "S1 reads back Unlocked without explicit write; S2 Up clears both stages",
+      "after_af_timeout_no_s2": "S1 remains Locked; must explicitly release before next operation",
+      "confidence": "measured"
+    },
+    "af_mf_physical_switch": {
+      "produces_property_callbacks": true,
+      "callback_pattern": "coalesced batch, occasional straggler ~102ms later",
+      "unrelated_churn_possible": true,
+      "state_readable_in_callback": true,
+      "confidence": "measured"
+    },
+    "live_view_during_af_capture": {
+      "lv_continues_during_af": true,
+      "lv_gap_around_exposure_ms": { "observed": 108, "unit": "ms", "confidence": "measured" },
+      "lv_resumes_automatically": true
+    },
+    "repeated_afs_captures": {
+      "description": "Three sequential AF-S captures through S1-gated flow in clean sessions",
+      "all_produced_unique_content": true,
+      "all_preview_hashes_distinct": true,
+      "no_busy_response": true,
+      "no_stale_preview": true,
+      "content_id_note": "IDs monotonically increasing but not guaranteed contiguous. Detection must use new_id > baseline.",
+      "confidence": "measured"
+    }
+  },
+
+  "phase1_preview_paths": {
+    "ram_postview": {
+      "setting_enable_key": "Setting_Key_EnablePostView",
+      "setting_enable_value": 1,
+      "setting_type_key": "Setting_Key_PostViewTransferringType",
+      "setting_type_value": "CrPostViewTransferring_UserSelect_RAM (0x00008001)",
+      "notify_callback": "OnNotifyPostViewImage(filename, size)",
+      "pull_api": "PullPostViewImage(handle, buf, bufSize)",
+      "required_control_mode": "Remote (CrSdkControlMode_Remote=0)",
+      "format": "JPEG",
+      "dimensions_px": "4240x2832",
+      "size_bytes_observed": 4639743,
+      "size_mb": 4.42,
+      "trigger_to_callback_ms": {
+        "observed": 681,
+        "unit": "ms",
+        "confidence": "measured"
+      },
+      "callback_to_pull_complete_ms": {
+        "observed": 2,
+        "unit": "ms",
+        "confidence": "measured"
+      },
+      "trigger_to_bytes_in_ram_ms": {
+        "observed": 683,
+        "unit": "ms",
+        "confidence": "measured"
+      },
+      "exact_still_association": true,
+      "requires_original_download": false,
+      "interferes_with_next_capture": false,
+      "configuration_required": false,
+      "notes": "Full-resolution JPEG at 4240x2832. SetDeviceSetting(EnablePostView) is rejected in Remote mode (0x8402), but postview is delivered anyway when destination is Host+Card. Configuration acceptance and delivery are independent capabilities."
+    },
+
+    "screennail": {
+      "mode": "RemoteTransfer",
+      "api": "GetRemoteTransferContentsCompressedDataFile",
+      "compressed_data_type": "CrGetContentsCompressedDataType_Screennail",
+      "content_id_source": "GetRemoteTransferContentsInfoList for newest date, select max content ID",
+      "format": "JPEG",
+      "dimensions_px": "1616x1080",
+      "size_bytes_observed": 122986,
+      "size_kb": 120,
+      "trigger_to_content_in_index_ms": {
+        "observed": 816,
+        "unit": "ms",
+        "confidence": "measured"
+      },
+      "trigger_to_bytes_complete_ms": {
+        "observed": 902,
+        "unit": "ms",
+        "confidence": "measured"
+      },
+      "transfer_duration_ms": {
+        "observed": 86,
+        "unit": "ms",
+        "confidence": "measured"
+      },
+      "exact_still_association": true,
+      "requires_original_download": false,
+      "interferes_with_next_capture": false,
+      "notes": "Best balance of size and resolution for reconstruction preview. Exact-still association confirmed by content ID matching."
+    },
+
+    "thumbnail": {
+      "mode": "RemoteTransfer",
+      "api": "GetRemoteTransferContentsCompressedDataFile",
+      "compressed_data_type": "CrGetContentsCompressedDataType_Thumbnail",
+      "format": "JPEG",
+      "dimensions_px": "160x120",
+      "size_bytes_observed": 56113,
+      "size_kb": 55,
+      "trigger_to_content_in_index_ms": {
+        "observed": 851,
+        "unit": "ms",
+        "confidence": "measured"
+      },
+      "trigger_to_bytes_complete_ms": {
+        "observed": 944,
+        "unit": "ms",
+        "confidence": "measured"
+      },
+      "transfer_duration_ms": {
+        "observed": 93,
+        "unit": "ms",
+        "confidence": "measured"
+      },
+      "exact_still_association": true,
+      "requires_original_download": false,
+      "interferes_with_next_capture": false,
+      "notes": "160x120 is too small for reconstruction. Slower than screennail despite smaller size; overhead dominates."
+    },
+
+    "live_view_frame_fallback": {
+      "api": "GetLiveViewImage / GetLiveViewImageInfo",
+      "format": "JPEG",
+      "dimensions_px": "640x428",
+      "size_range_kb": "27.5-86.9",
+      "fps_still_mode": 29.2,
+      "fps_video_mode": 26.8,
+      "sdk_buffer_copy_us": {
+        "min": 3,
+        "max": 32,
+        "unit": "us",
+        "confidence": "measured"
+      },
+      "trigger_to_first_post_capture_frame_ms": {
+        "observed": 504,
+        "unit": "ms",
+        "confidence": "measured"
+      },
+      "exact_still_association": false,
+      "notes": "Fastest visual feedback but NOT tied to exact captured still. Stream pauses around capture event. Use as immediate preview; replace with screennail or postview when exact-still data arrives.",
+      "confidence": "measured"
+    },
+
+    "small_size_transfer": {
+      "status": "NOT_CHARACTERIZED",
+      "api": "PullContentsFile with CrPropertyStillImageTransSize_SmallSize",
+      "mode": "ContentsTransfer",
+      "notes": "Probe crashed due to stale handle bug (handle used after list Release). Camera recovered cleanly. Requires ContentsTransfer mode (reconnect from Remote). Marked as optional optimization, not required for initial architecture.",
+      "confidence": "not_measured"
+    }
+  },
+
+  "phase1_capability_matrix": {
+    "description": "Control mode and save destination are independent axes that each gate functionality",
+    "axes": {
+      "control_mode": ["Remote", "RemoteTransfer"],
+      "destination": ["MemoryCard", "HostPC_and_MemoryCard"]
+    },
+    "matrix": {
+      "Remote_MemoryCard": {
+        "property_count": 394,
+        "still_capture": true,
+        "live_view": true,
+        "postview_config_accepted": false,
+        "postview_config_error": "0x8402",
+        "postview_delivery": "unresolved",
+        "content_list": false,
+        "thumbnail": false,
+        "screennail": false
+      },
+      "Remote_HostCard": {
+        "property_count": 394,
+        "still_capture": true,
+        "live_view": true,
+        "postview_config_accepted": false,
+        "postview_config_error": "0x8402",
+        "postview_delivery": true,
+        "postview_delivery_size_bytes_observed": 163265,
+        "content_list": false,
+        "thumbnail": false,
+        "screennail": false
+      },
+      "RemoteTransfer_MemoryCard": {
+        "property_count": 392,
+        "still_capture": true,
+        "live_view": false,
+        "live_view_error": "CrError_Generic (GetLiveViewImage), zero-byte buffer (GetLiveViewImageInfo)",
+        "postview_config_accepted": true,
+        "postview_delivery": false,
+        "postview_delivery_note": "size 0 observed",
+        "content_list": true,
+        "thumbnail": true,
+        "screennail": true
+      },
+      "RemoteTransfer_HostCard": {
+        "property_count": 392,
+        "still_capture": true,
+        "live_view": false,
+        "live_view_error": "CrError_Generic (GetLiveViewImage), zero-byte buffer (GetLiveViewImageInfo)",
+        "postview_config_accepted": true,
+        "postview_delivery": true,
+        "content_list": true,
+        "thumbnail": true,
+        "screennail": true
+      }
+    },
+    "key_finding": "Remote + HostCard is the recommended single-session mode for SPTFS: provides live view, AF, capture, and exact RAM postview without a mode switch. RemoteTransfer is required only for content index / screennail access.",
+    "postview_config_vs_delivery": "Postview configuration acceptance and postview delivery are independent capabilities. SetDeviceSetting rejection does not imply non-delivery.",
+    "confidence": "measured"
+  },
+
+  "phase1_mode_transitions": {
+    "in_session_mode_change": false,
+    "mode_change_requires": "Disconnect + ReleaseDevice + re-Connect with new mode",
+    "connect_to_usable_handle_ms": { "min": 119, "max": 155, "unit": "ms", "confidence": "measured" },
+    "teardown_api_time_ms": { "observed": 100, "unit": "ms", "confidence": "measured" },
+    "post_reconnect_lv_first_frame": "on first attempt",
+    "post_reconnect_properties": 394,
+    "same_enum_object_reusable": true,
+    "late_callbacks_between_sessions": false,
+    "confidence": "measured"
+  },
+
+  "phase1_live_view": {
+    "format": "JPEG",
+    "dimensions_px": "640x428",
+    "fps_still_mode": { "observed": 29.2, "confidence": "measured" },
+    "fps_video_mode": { "observed": 26.8, "confidence": "measured" },
+    "sdk_buffer_ownership": "SDK-internal background buffer; copy out immediately, do not hold reference across frames",
+    "sdk_copy_cost_us": { "min": 3, "max": 32, "confidence": "measured" },
+    "behavior_during_still_capture": "stream pauses around capture event",
+    "behavior_during_video": "continues uninterrupted",
+    "available_in_remote_mode": true,
+    "available_in_remote_transfer_mode": false,
+    "remote_transfer_lv_error": "GetLiveViewImage returns CrError_Generic; GetLiveViewImageInfo reports zero buffer. Tested 100+ attempts, multiple processes."
+  },
+
+  "phase1_video": {
+    "start_command": "SendCommand(CrCommandId_MovieRecord, CrCommandParam_Down)",
+    "stop_command": "SendCommand(CrCommandId_MovieRecord, CrCommandParam_Up) or CrCommandId_MovieRecButtonToggle",
+    "recording_state_active_ms": { "min": 182, "max": 234, "confidence": "measured" },
+    "recording_state_idle_after_stop_ms": { "min": 152, "max": 202, "confidence": "measured" },
+    "result_callback": "OnCompleteOperation(0x20069) = MovieRecordingOperation_Result_OK",
+    "live_view_during_video": "continues at ~26.8 fps"
+  },
+
+  "phase1_reconnect": {
+    "software_reconnect": {
+      "clean_cycles": "5/5",
+      "full_process_lifecycle_s": { "min": 3.41, "max": 3.47, "confidence": "measured" }
+    },
+    "physical_power_cycle": {
+      "recovery": "automatic, no process restart required",
+      "recovery_time_from_reconnecting_warning_s": { "observed": 44.5, "confidence": "measured" }
+    },
+    "usb_unplug_replug_idle": {
+      "connect_reconnecting_ms": 27261,
+      "second_on_connected_ms": 55322,
+      "connect_reconnected_ms": 55322,
+      "recovery_interval_s": 28.06,
+      "on_disconnected_during_loss": false,
+      "on_disconnected_after_explicit_disconnect": true,
+      "device_handle_reusable_after_recovery": true,
+      "property_count_after_recovery": 394,
+      "operator_action_required": "Camera displayed USB mode prompt; operator selected Remote Shooting",
+      "confidence": "measured"
+    },
+    "usb_unplug_replug_during_live_view": {
+      "connect_reconnecting_ms": 22828,
+      "second_on_connected_ms": 45998,
+      "connect_reconnected_ms": 45998,
+      "recovery_interval_s": 23.17,
+      "on_disconnected_during_loss": false,
+      "first_valid_jpeg_after_recovery_ms": 38,
+      "live_view_resumed_automatically": true,
+      "device_handle_reusable_after_recovery": true,
+      "property_count_after_recovery": 394,
+      "failed_polls_during_loss": "returned SDK errors normally, no native crash",
+      "confidence": "measured"
+    },
+    "disconnect_signal": "OnWarning(CrWarning_Connect_Reconnecting) — NOT OnDisconnected",
+    "recovery_signals": ["CrWarning_Connect_Reconnected", "second OnConnected"],
+    "critical_rule": "With CrReconnecting_ON the bridge must not require OnDisconnected before accepting a subsequent OnConnected. State machine: Connected -> Reconnecting -> Reconnected (second OnConnected) without intermediate Disconnected.",
+    "session_already_opened_0x8210": "Observed on rapid consecutive connects. Transient; add short delay between disconnect and reconnect.",
+    "confidence": "measured"
+  },
+
+  "phase1_properties": {
+    "property_count_remote_mode": 394,
+    "property_count_remote_transfer_mode": 392,
+    "extra_codes_in_remote": ["0x581", "0x582"],
+    "extra_codes_likely": "CrLiveViewProperty_FaceFrame, CrLiveViewProperty_Level (inferred, not confirmed)",
+    "change_callbacks": ["OnPropertyChanged", "OnPropertyChangedCodes"],
+    "lv_change_callbacks": ["OnLvPropertyChanged", "OnLvPropertyChangedCodes"],
+    "physical_change_triggers_callback": true,
+    "unknown_code_handling": "Preserve unknown numeric codes; do not discard unrecognized properties",
+    "confidence": "measured"
+  },
+
+  "phase1_repeated_exact_still": {
+    "description": "Three deliberate captures in separate clean sessions to verify exact-still association by content ID",
+    "baseline": "Pre-capture baseline was the immediately preceding content in the index",
+    "shots": [
+      {
+        "shot": 1,
+        "capture_event_ms": 387,
+        "content_available_ms": 939,
+        "content_id": 131154,
+        "filename": "DSC03394.ARW",
+        "screennail_complete_ms": 1010,
+        "screennail_bytes": 118695,
+        "screennail_sha256_prefix": "98E00967"
+      },
+      {
+        "shot": 2,
+        "capture_event_ms": 402,
+        "content_available_ms": 799,
+        "content_id": 131155,
+        "filename": "DSC03395.ARW",
+        "screennail_complete_ms": 881,
+        "screennail_bytes": 118774,
+        "screennail_sha256_prefix": "25F0C1D1"
+      },
+      {
+        "shot": 3,
+        "capture_event_ms": 387,
+        "content_available_ms": 811,
+        "content_id": 131156,
+        "filename": "DSC03396.ARW",
+        "screennail_complete_ms": 894,
+        "screennail_bytes": 118792,
+        "screennail_sha256_prefix": "F7A7BDC5"
+      }
+    ],
+    "observations": [
+      "Content IDs increased monotonically",
+      "File numbers increased monotonically",
+      "All JPEG hashes distinct",
+      "No busy response, ambiguous callback, or previous-shot image observed",
+      "Long-session callback accumulation not tested; single-shot probe used for safety"
+    ],
+    "confidence": "measured"
+  },
+
+  "phase2_bridge": {
+    "verdict": "thin_c_shim_ctypes",
+    "verdict_rationale": [
+      "95% of the API is extern-C, works with ctypes directly",
+      "C ABI shim (~300 lines C++) isolates IDeviceCallback and ICrCameraObjectInfo vtable dispatch",
+      "C ABI binary is Python-version-independent",
+      "SDK callbacks never enter Python directly; shim queues events into ring buffer",
+      "Natural isolation point for Sony proprietary headers",
+      "Works across Windows, Linux (ARM/x64), macOS SDK variants"
+    ],
+    "runner_up": "pybind11",
+    "runner_up_reason": "Faster initial Windows-only prototype but requires per-Python-version .pyd builds and does not solve object lifetime problem",
+    "ruled_out": ["pure_ctypes_vtable_hack (fragile, no type safety)", "cffi (no advantage over ctypes for this surface)"],
+
+    "calling_convention": "MSVC x64 ABI, all public functions extern-C, no name mangling",
+    "callback_thread": "SDK-internal thread; callbacks must not block; route to event queue",
+
+    "ownership_rules": {
+      "ICrEnumCameraObjectInfo": "caller, Release() required",
+      "ICrCameraObjectInfo_from_enum": "owned by enum, do not separately release",
+      "CrDeviceHandle": "caller, ReleaseDevice() + Disconnect() required",
+      "CrDeviceProperty_arrays": "caller, ReleaseDeviceProperties() required",
+      "postview_buffer": "caller-allocated, PullPostViewImage copies into it",
+      "content_handle_lists": "caller, separate Release call per list type"
+    },
+
+    "shim_design_principles": [
+      "Opaque generation-checked IDs, never expose raw Sony pointers",
+      "Internal thread-safe event queue",
+      "Python polls/drains events, does not receive direct callbacks",
+      "Copy content metadata immediately while Sony handle lists are valid",
+      "Copy-out image functions with explicit capacity and returned byte count",
+      "RAII for every Sony list, device, property array, image object",
+      "Idempotent disconnect/close",
+      "Explicit connection states: connecting, connected, reconnecting, closing, closed",
+      "Explicit session concept: control_mode + destination + observed capabilities",
+      "Preserve unknown property codes; never discard unrecognized numeric codes"
+    ],
+
+    "session_concept": {
+      "camera": "Persistent identity — model, firmware, transport, static capabilities. Survives mode transitions.",
+      "session": "One active CRSDK connection. Has control_mode, destination, and observed runtime capabilities.",
+      "note": "Changing Remote <-> RemoteTransfer replaces the session, not the camera. The Python Camera object can logically persist across reconnects."
+    }
+  },
+
+  "fx3a_quirks": [
+    {
+      "id": "Q1",
+      "description": "Model enum is ILME_FX3A, distinct from ILME_FX3",
+      "impact": "Use CrCameraDeviceModel_ILME_FX3A in CreateCameraObjectInfoUSBConnection"
+    },
+    {
+      "id": "Q2",
+      "description": "GetRemoteTransferContentsInfoList with maxNums=1 returns oldest record for date, not newest",
+      "impact": "Must request all records for the date, select by max content ID or creation timestamp",
+      "confirmed_by": "probe code inspection and behavior during screennail characterization"
+    },
+    {
+      "id": "Q3",
+      "description": "Content handle lists must be copied and released while valid; reuse after Release causes access violation",
+      "impact": "Shim must copy metadata on retrieval and never expose raw handles",
+      "confirmed_by": "crash during small-transfer probe; camera recovered cleanly"
+    },
+    {
+      "id": "Q4",
+      "description": "CrWarning_Connect_Reconnecting fires on disconnect, not OnDisconnected",
+      "impact": "State machine must handle reconnect without intermediate Disconnected state",
+      "confirmed_by": "software and physical reconnect characterization; USB unplug/replug (idle and live-view)"
+    },
+    {
+      "id": "Q5",
+      "description": "SessionAlreadyOpened (0x8210) on rapid consecutive connects",
+      "impact": "Add short delay between disconnect and next connect attempt",
+      "confirmed_by": "transient error observed during session"
+    },
+    {
+      "id": "Q6",
+      "description": "GetRemoteTransferContentsInfoList does not accept null capture-date pointer even for all-dates query",
+      "impact": "Must enumerate capture dates first with GetRemoteTransferCapturedDateList, then query per date",
+      "confirmed_by": "InvalidParameter return on null date pointer in probe"
+    },
+    {
+      "id": "Q7",
+      "description": "After USB unplug/replug, camera displays a USB mode selection prompt on its screen",
+      "impact": "Operator must manually select Remote Shooting before the SDK can reconnect; automated unattended recovery is not possible without operator intervention",
+      "confirmed_by": "observed during USB unplug/replug while idle test"
+    },
+    {
+      "id": "Q8",
+      "description": "CrCommandId_Release (S2) does not assert S1/AF; in AF mode, SDK returns success but no exposure occurs",
+      "impact": "Must use explicit S1 SetDeviceProperty to assert AF before issuing S2 for autofocus capture",
+      "confirmed_by": "AF-S test with Release-only command — no Captured_Event, no content"
+    },
+    {
+      "id": "Q9",
+      "description": "TrackingSubject_AF_C is an in-progress AF-C state, not a focus-success state",
+      "impact": "S2 must not be issued on TrackingSubject; wait for Focused_AF_C. In measured run TrackingSubject led Focused by ~61ms.",
+      "confirmed_by": "AF-C characterization run"
+    },
+    {
+      "id": "Q10",
+      "description": "OnWarningExt carries CrWarningExt_AFStatus (0x60001) as a second AF-state channel independent of FocusIndication",
+      "impact": "Subscribe to both; either may lead the other with no fixed ordering. First valid Focused_* from either wins.",
+      "confirmed_by": "AF-S and AF-C characterization runs"
+    },
+    {
+      "id": "Q11",
+      "description": "S1 remains Locked after AF timeout if S2 was never issued",
+      "impact": "Timeout cleanup path must explicitly release S1; successful S2 Up clears both stages automatically",
+      "confirmed_by": "AF-S no-lock test"
+    },
+    {
+      "id": "Q12",
+      "description": "GetLiveViewImage returns CrError_Generic in RemoteTransfer mode; GetLiveViewImageInfo reports zero buffer",
+      "impact": "Live view is not available in RemoteTransfer mode. Live view requires Remote mode.",
+      "confirmed_by": "100+ attempts across multiple clean processes"
+    },
+    {
+      "id": "Q13",
+      "description": "SetDeviceSetting(EnablePostView) is rejected (0x8402) in Remote mode, but postview bytes are still delivered when destination is Host+Card",
+      "impact": "Postview configuration acceptance and postview delivery are independent capabilities; check delivery by attempting and observing, not by inferring from config acceptance",
+      "confirmed_by": "Remote + Host+Card postview delivery observed"
+    },
+    {
+      "id": "Q14",
+      "description": "Content IDs are monotonically increasing but not guaranteed contiguous",
+      "impact": "New-content detection must use new_id > baseline_id, not new_id == baseline_id + 1",
+      "confirmed_by": "Repeated AF-S capture test"
+    }
+  ],
+
+  "sptfs_recommendations": {
+    "recommended_session_mode": "Remote + Host PC + Memory Card",
+    "rationale": "Single session providing live view, AF, capture, and exact RAM postview. RemoteTransfer needed only for content index / screennail access; requires disconnect/reconnect.",
+    "preview_strategy": "Use live-view frame (~504ms) as immediate feedback, replace with RAM postview (~683ms) when available in Remote+HostCard, or screennail (~902ms) via RemoteTransfer session if needed",
+    "best_exact_still_preview": "screennail (1616x1080, ~123KB, ~902ms) via RemoteTransfer session",
+    "best_fast_preview": "RAM postview (4240x2832, ~4.64MB, ~683ms) — exact-still, available in Remote+HostCard without mode switch",
+    "ks2_comparison": {
+      "ks2_preview_size_kb": 54,
+      "ks2_preview_latency_ms": "~54",
+      "fx3a_closest_equivalent": "screennail",
+      "fx3a_screennail_size_kb": 120,
+      "fx3a_screennail_latency_ms": "~902",
+      "verdict": "Sony does not provide a sub-200ms small-JPEG exact-still path. Screennail is the functional equivalent at ~900ms. Live-view frame bridges the gap for visual feedback. RAM postview (683ms) provides high-resolution exact-still faster than screennail but at ~4.64MB."
+    }
+  }
+}
