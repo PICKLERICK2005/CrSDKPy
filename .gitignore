@@ -41,6 +41,11 @@ CrSDK_v*.zip
 *.dylib
 *.so
 
+# Native bridge build output. The sources under native/ are ours and are
+# tracked; the build directory holds compiled artifacts and, during local
+# testing, user-supplied Sony runtime libraries.
+/native/build/
+
 # Local characterization and exploratory work
 #
 # These directories are intentionally excluded from the repository. Promote
