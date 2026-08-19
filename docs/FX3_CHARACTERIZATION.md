@@ -33,8 +33,16 @@ In Device Manager the camera appears under **libusbK USB Devices**, not Imaging 
 
 ### 1.1 Still capture (manual focus)
 
-Command: `SendCommand(handle, CrCommandId_S1andRelease, Down)` then `Up`.  
-Full-press release (`CrCommandId_Release`) also works in MF mode. S1+Release is preferred for MF because it runs AF first if focus mode allows.
+Command: `SendCommand(handle, CrCommandId_Release, Down)`, ~35 ms, then `Up`.
+This is S2 / full-shutter release only.
+
+> **Corrected.** An earlier revision of this section claimed the MF baseline
+> used `CrCommandId_S1andRelease` and that it was preferred. Both statements
+> were wrong. The baseline was measured with the `CrCommandId_Release`
+> Down/~35 ms/Up lifecycle, and `S1andRelease` is ungated — exposure is
+> committed before application logic can accept or reject focus — so it is not
+> the recommended autofocus capture path. See section 1.2. Timings below are
+> unchanged.
 
 `Connect()` is called in `CrSdkControlMode_Remote`. Capture is unavailable in ContentsTransfer mode without a reconnect.
 

@@ -29,7 +29,8 @@
   },
 
   "phase1_capture": {
-    "trigger_command": "CrCommandId_S1andRelease (Down then Up)",
+    "trigger_command": "CrCommandId_Release (Down, ~35 ms, Up)",
+    "trigger_command_note": "S2/full-shutter release only. The MF baseline was measured with this command; an earlier revision of this file incorrectly recorded it as CrCommandId_S1andRelease. Timings below are unchanged. For autofocus capture use the explicit S1-gated flow, not S1andRelease, which is ungated.",
     "trigger_to_capture_event_ms": {
       "min": 380,
       "max": 435,
