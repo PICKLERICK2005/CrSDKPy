@@ -9,13 +9,13 @@ An independent Python interface for Sony Camera Remote SDK (CRSDK).
 > deterministic simulator and a native out-of-process backend.
 >
 > **Hardware validation is tracked separately from implementation.** Which
-> features have actually been exercised on a camera — and which have not — is
+> features have actually been exercised on a camera, and which have not, is
 > recorded in [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md). An
 > implemented feature and a validated one are different claims and this
 > project does not conflate them.
 
 CrSDKPy is a general-purpose library, not a wrapper around one camera.
-Capabilities are discovered at runtime and there is no model-name branching
+Capabilities are discovered at runtime so there is no model-name branching
 anywhere in the codebase.
 
 ```text
@@ -212,16 +212,16 @@ python examples/camera_adapter.py
 
 ## Documentation
 
-* [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md) — what is implemented,
+* [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md): what is implemented,
   what is simulator-tested, and what has been validated on real hardware.
-* [`docs/INTEGRATION_CONTRACT.md`](docs/INTEGRATION_CONTRACT.md) — the surface
+* [`docs/INTEGRATION_CONTRACT.md`](docs/INTEGRATION_CONTRACT.md): the surface
   to build an application against.
-* [`docs/architecture.md`](docs/architecture.md) — architecture, Camera vs
+* [`docs/architecture.md`](docs/architecture.md): architecture, Camera vs
   Session, backend contract, capability model, simulator, event model, capture
   lifecycle.
-* [`docs/FX3_CHARACTERIZATION.md`](docs/FX3_CHARACTERIZATION.md) — the hardware
+* [`docs/FX3_CHARACTERIZATION.md`](docs/FX3_CHARACTERIZATION.md): the hardware
   measurements the design is based on.
-* [`tools/hardware_validation.py`](tools/hardware_validation.py) — the gates
+* [`tools/hardware_validation.py`](tools/hardware_validation.py): the gates
   that only a real camera can answer. Run `python tools/hardware_validation.py
   --list` to see the stages.
 
@@ -262,4 +262,4 @@ Known limitations:
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT - See [LICENSE](LICENSE).
