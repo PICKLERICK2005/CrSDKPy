@@ -1,0 +1,43 @@
+# Source distribution contents.
+#
+# The wheel is deliberately pure Python: the native bridge and host are built
+# by the user against their own copy of the Sony SDK, which cannot be
+# redistributed, so there is nothing platform-specific to ship. The sdist
+# therefore has to carry the first-party native sources, or a user who wants
+# hardware support has no way to build them from a release artifact.
+
+include LICENSE
+include README.md
+include MANIFEST.in
+
+# First-party native sources. Everything here is ours; see the prune list
+# below for what must never travel with it.
+recursive-include native *.h *.c *.cpp *.txt *.md
+
+# Documentation, the integration example, and the maintained hardware
+# validation suite.
+recursive-include docs *.md *.json
+recursive-include examples *.py
+recursive-include tools *.py
+
+# Tests, so a downstream packager can verify the source they received.
+recursive-include tests *.py
+
+# --- never ship -------------------------------------------------------------
+#
+# Sony's SDK is user-supplied under its own terms and is never redistributed
+# by this project. The prunes below are belt and braces on top of .gitignore:
+# an sdist is built from the working tree, not from git, so a local build
+# directory holding vendor runtime libraries would otherwise be swept in.
+prune native/build
+prune characterization
+prune scratch
+prune scripts
+prune captures
+prune artifacts
+prune probes
+prune test_scripts
+
+global-exclude *.dll *.so *.dylib *.lib *.exp *.obj *.o *.exe *.pdb *.ilk
+global-exclude *.pyc *.pyo
+global-exclude .DS_Store Thumbs.db

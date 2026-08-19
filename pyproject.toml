@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "CrSDKPy"
 dynamic = ["version"]
-description = "An independent Python interface for Sony Camera Remote SDK"
+description = "An independent, capability-driven Python interface for the Sony Camera Remote SDK"
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
@@ -14,7 +14,7 @@ authors = [
 ]
 keywords = ["camera", "sony", "remote-control", "sdk"]
 classifiers = [
-  "Development Status :: 2 - Pre-Alpha",
+  "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",

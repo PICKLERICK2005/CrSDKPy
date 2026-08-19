@@ -26,6 +26,20 @@ jobs:
       - run: python -m ruff check .
       - run: python -m pytest
 
+  # The declared floor is Python 3.9, but development happens on a much newer
+  # interpreter where 3.9-invalid syntax still runs. This checks the floor
+  # statically so a regression is caught even if the 3.9 matrix job is skipped.
+  version-floor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: python -m pip install --upgrade pip vermin
+      - run: vermin --target=3.9 --violations --eval-annotations --no-tips src/crsdkpy
+
   build:
     runs-on: ubuntu-latest
     steps:
@@ -34,8 +48,9 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-      - run: python -m pip install --upgrade pip build
+      - run: python -m pip install --upgrade pip build twine
       - run: python -m build
+      - run: python -m twine check dist/*
       - uses: actions/upload-artifact@v4
         with:
           name: distributions
