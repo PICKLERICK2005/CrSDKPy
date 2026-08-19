@@ -40,6 +40,8 @@ dev = [
   "build>=1.2",
   "pytest>=8",
   "ruff>=0.9",
+  "twine>=5",
+  "vermin>=1.6",
 ]
 
 [tool.setuptools.dynamic]
@@ -58,3 +60,15 @@ line-length = 88
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
+
+[tool.ruff.lint.pyupgrade]
+# The supported floor is Python 3.9, where PEP 604 unions and PEP 585 generics
+# are only valid inside annotations that are never evaluated at runtime. Some
+# of ours are evaluated (runtime type aliases, generic base classes), so the
+# typing spellings are kept deliberately rather than modernized.
+keep-runtime-typing = true
+
+[tool.ruff.lint.per-file-ignores]
+# Tests import the local conftest helpers, which is first-party to the test
+# run but not an installed package.
+"tests/*" = ["I001"]
