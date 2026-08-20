@@ -89,6 +89,17 @@ extern "C" {
 #define CRSDKPY_EVENT_ERROR            6
 #define CRSDKPY_EVENT_RAW              7
 
+/* Warning codes raised by the bridge itself rather than by the vendor. Kept in
+ * a range the vendor does not use so a caller can always tell the two apart,
+ * and reported as ordinary warnings because none of them stops a session from
+ * being useful. */
+#define CRSDKPY_WARN_FIRST_PARTY_BASE   0xC5D00000u
+/* No usable directory was configured for host-bound stills, so a capture whose
+ * destination includes the host will not produce a postview. */
+#define CRSDKPY_WARN_SAVE_PATH_UNUSABLE (CRSDKPY_WARN_FIRST_PARTY_BASE + 1u)
+/* The camera refused the save path; i0 carries the vendor error. */
+#define CRSDKPY_WARN_SAVE_PATH_REFUSED  (CRSDKPY_WARN_FIRST_PARTY_BASE + 2u)
+
 /* Which channel reported a focus state. The two use different vendor
  * enumerations and neither is reliably first. */
 #define CRSDKPY_FOCUS_SRC_PROPERTY 0

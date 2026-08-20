@@ -17,6 +17,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cstdlib>
 #include <cstring>
 #include <deque>
 #include <memory>
@@ -77,6 +78,43 @@ std::string narrow(const CrChar* text)
 #else
     return std::string(text);
 #endif
+}
+
+// The inverse of narrow(), for the few vendor calls that take a path. Paths
+// are widened byte-for-byte, which covers ASCII; a non-ASCII path is rejected
+// by the caller rather than silently mangled here.
+std::vector<CrChar> widen(const std::string& text)
+{
+    std::vector<CrChar> out;
+    out.reserve(text.size() + 1);
+    for (unsigned char c : text) out.push_back(static_cast<CrChar>(c));
+    out.push_back(static_cast<CrChar>(0));
+    return out;
+}
+
+// Reads an environment variable. Uses the bounds-checked form on Windows,
+// where the portable one is deprecated.
+std::string environment(const char* name)
+{
+#if defined(_WIN32)
+    char buffer[1024];
+    size_t length = 0;
+    if (getenv_s(&length, buffer, sizeof(buffer), name) != 0 || length == 0) {
+        return std::string();
+    }
+    return std::string(buffer);
+#else
+    const char* value = std::getenv(name);
+    return value ? std::string(value) : std::string();
+#endif
+}
+
+bool is_ascii(const std::string& text)
+{
+    for (unsigned char c : text) {
+        if (c >= 0x80) return false;
+    }
+    return true;
 }
 
 // Temporarily switches the process working directory, restoring it on scope
@@ -300,7 +338,7 @@ public:
     Session(const Session&) = delete;
     Session& operator=(const Session&) = delete;
 
-    int32_t open(SDK::ICrCameraObjectInfo* info)
+    int32_t open(SDK::ICrCameraObjectInfo* info, const std::string& save_directory)
     {
         state_.store(CRSDKPY_STATE_CONNECTING);
         push(CRSDKPY_EVENT_CONNECTION, 0, CRSDKPY_STATE_CONNECTING, 0, 0, 0);
@@ -334,7 +372,37 @@ public:
         // genuinely means the session is usable, which is what the backend
         // contract promises.
         wait_for_property_quiet(kPropertyQuietMs, kPropertySettleCapMs);
+        apply_save_info(save_directory);
         return CRSDKPY_OK;
+    }
+
+    // Tells the camera where a host-bound still may be written.
+    //
+    // The vendor's own sample calls this immediately after every successful
+    // Connect, and hardware showed why it is not optional: with no save path
+    // configured, a capture whose destination includes the host announces no
+    // postview at all, and StillImageStoreDestination then reports itself as
+    // not settable for the rest of the session, consistent with a transfer the
+    // camera is still holding. A card-only session never notices.
+    //
+    // A failure here is reported as an event and does not fail the connect,
+    // because a session that only ever writes to the card is still perfectly
+    // usable.
+    void apply_save_info(const std::string& directory)
+    {
+        if (directory.empty() || !is_ascii(directory)) {
+            push(CRSDKPY_EVENT_WARNING, CRSDKPY_WARN_SAVE_PATH_UNUSABLE, 0, 0, 0, 0);
+            return;
+        }
+        std::vector<CrChar> path = widen(directory);
+        std::vector<CrChar> prefix = widen(std::string());
+        // -1 keeps the camera's own file numbering rather than imposing one.
+        const auto error =
+            SDK::SetSaveInfo(handle_, path.data(), prefix.data(), -1);
+        if (error != SDK::CrError_None) {
+            push(CRSDKPY_EVENT_WARNING, CRSDKPY_WARN_SAVE_PATH_REFUSED,
+                 static_cast<int32_t>(error), 0, 0, 0);
+        }
     }
 
     // Returns once no property notification has arrived for quiet_ms, or
@@ -722,6 +790,9 @@ struct Slot
 std::mutex g_mutex;
 bool g_initialized = false;
 std::string g_adapter_dir;
+// Where a host-bound still may be written. Empty means "use the adapter
+// directory", which is where the host process already runs.
+std::string g_save_dir;
 EnumList g_cameras(nullptr);
 std::vector<std::string> g_camera_keys;
 std::vector<Slot> g_slots;
@@ -821,6 +892,7 @@ int32_t crsdkpy_init(const char* adapter_dir)
     // around the init call and put it back, so the caller's working directory
     // is not permanently changed by loading a camera library.
     g_adapter_dir = adapter_dir ? adapter_dir : "";
+    g_save_dir = environment("CRSDKPY_SAVE_DIR");
     ScopedWorkingDirectory scoped(g_adapter_dir.c_str());
     if (!scoped.ok()) {
         set_error("could not switch to the adapter directory");
@@ -957,7 +1029,9 @@ int32_t crsdkpy_open_session(const char* device_key, int32_t mode,
     auto session = std::make_shared<Session>(wanted, mode);
     auto* raw_info = const_cast<SDK::ICrCameraObjectInfo*>(
         g_cameras.get()->GetCameraObjectInfo(index));
-    int32_t status = session->open(raw_info);
+    const std::string save_directory =
+        g_save_dir.empty() ? g_adapter_dir : g_save_dir;
+    int32_t status = session->open(raw_info, save_directory);
 
     // One retry, and only for the connection-callback timeout.
     //
@@ -975,7 +1049,7 @@ int32_t crsdkpy_open_session(const char* device_key, int32_t mode,
     // repeating it would only double the delay.
     if (status == CRSDKPY_ERR_CONNECT_FAILED) {
         session = std::make_shared<Session>(wanted, mode);
-        status = session->open(raw_info);
+        status = session->open(raw_info, save_directory);
     }
     if (status != CRSDKPY_OK) return status;
 
