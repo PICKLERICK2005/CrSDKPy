@@ -61,6 +61,8 @@ class ConnectionEvent(Event):
     #: Set when the transport recovered without an intervening disconnect.
     recovered: bool = False
     backend_code: Optional[int] = None
+    #: The vendor's connection version, reported only on a first connect.
+    connection_version: Optional[int] = None
 
 
 @dataclass(frozen=True)

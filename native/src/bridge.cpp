@@ -685,8 +685,12 @@ void Callback::OnConnected(SDK::DeviceConnectionVersioin version)
     // A second OnConnected after a recovery is normal and must not be treated
     // as an error or as a new session.
     session_->set_state(CRSDKPY_STATE_CONNECTED);
+    // i1 says whether this was a recovery and i2 carries the connection
+    // version. They are separate slots because a first connect reports a
+    // non-zero version, and putting the two in one field made every fresh
+    // session look like it had recovered from something.
     session_->push(CRSDKPY_EVENT_CONNECTION, 0, CRSDKPY_STATE_CONNECTED,
-                   static_cast<int32_t>(version), 0, 0);
+                   0 /* not a recovery */, static_cast<int32_t>(version), 0);
 }
 
 void Callback::OnDisconnected(CrInt32u error)
@@ -716,7 +720,7 @@ void Callback::OnWarning(CrInt32u warning)
     if (warning == SDK::CrWarning_Connect_Reconnected) {
         session_->set_state(CRSDKPY_STATE_CONNECTED);
         session_->push(CRSDKPY_EVENT_CONNECTION, warning, CRSDKPY_STATE_CONNECTED,
-                       1 /* recovered */, 0, 0);
+                       1 /* recovered */, 0 /* version unchanged */, 0);
         return;
     }
     if (warning == SDK::CrNotify_Captured_Event) {

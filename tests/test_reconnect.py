@@ -111,3 +111,52 @@ def test_manual_reconnect_trigger() -> None:
             sdk.backend.simulate_reconnect(session._id)
             assert session.wait_for_state(crsdkpy.ConnectionState.RECONNECTING)
             assert session.wait_for_state(crsdkpy.ConnectionState.CONNECTED)
+
+
+def test_a_first_connect_is_not_reported_as_a_recovery() -> None:
+    """The connection version must not be mistaken for the recovery flag.
+
+    Hardware sends a connection version on the first connect -- 300 on the
+    reference body -- and the bridge once carried that in the same field as
+    the recovery flag, so every fresh session claimed it had recovered from
+    something. A caller watching for recovery to resynchronise state would act
+    on that.
+    """
+    from crsdkpy.backend import _cabi
+    from crsdkpy.backend.native import _ABI_TO_STATE, decode_event
+
+    connected = next(
+        value for value, state in _ABI_TO_STATE.items()
+        if state is crsdkpy.ConnectionState.CONNECTED
+    )
+    raw = _cabi.EventStruct()
+    raw.kind = _cabi.EVENT_CONNECTION
+    raw.i0 = connected
+    raw.i1 = 0  # not a recovery
+    raw.i2 = 300  # connection version
+
+    event = decode_event(raw, timestamp_ms=1)
+
+    assert event.state is crsdkpy.ConnectionState.CONNECTED
+    assert not event.recovered
+    assert event.connection_version == 300
+
+
+def test_a_recovery_is_reported_as_one() -> None:
+    from crsdkpy.backend import _cabi
+    from crsdkpy.backend.native import _ABI_TO_STATE, decode_event
+
+    connected = next(
+        value for value, state in _ABI_TO_STATE.items()
+        if state is crsdkpy.ConnectionState.CONNECTED
+    )
+    raw = _cabi.EventStruct()
+    raw.kind = _cabi.EVENT_CONNECTION
+    raw.i0 = connected
+    raw.i1 = 1  # recovered
+    raw.i2 = 0
+
+    event = decode_event(raw, timestamp_ms=1)
+
+    assert event.recovered
+    assert event.connection_version is None

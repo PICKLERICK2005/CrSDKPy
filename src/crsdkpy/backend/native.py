@@ -423,6 +423,7 @@ def decode_event(
             state=_ABI_TO_STATE.get(raw.i0, ConnectionState.CLOSED),
             recovered=bool(raw.i1),
             backend_code=int(raw.code) or None,
+            connection_version=int(raw.i2) or None,
         )
     if raw.kind == _cabi.EVENT_PROPERTY_CHANGED:
         return PropertyChangedEvent(
