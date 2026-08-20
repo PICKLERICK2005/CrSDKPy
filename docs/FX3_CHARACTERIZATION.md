@@ -619,3 +619,70 @@ are no longer unknowns. Still open:
 - AF area positioning, focus-position stepping, burst, card-full and
   media-removal paths.
 - A second body, to separate FX3A quirks from generic CRSDK behaviour.
+
+## Read-only feature survey, 2026-08-20
+
+Property names below were decoded by parsing `CrDeviceProperty.h` into a
+code→name table (848 enumerators, 841 distinct codes) and validated against six
+codes independently confirmed on hardware. Nothing here was written; these are
+reads only, recorded to show what the body exposes.
+
+Of the 394 codes a Remote session reports, **392 decode to a vendor name and two
+do not: `0x0581` and `0x0582`.** They are absent from the vendor's own
+enumeration in this SDK version. This is the concrete case for treating unknown
+numeric codes as first-class rather than filtering to a known list.
+
+**Focus position is exposed, both directions.**
+
+```
+FocusPositionCurrentValue        0x0766  44303  read-only
+FollowFocusPositionCurrentValue  0x0757  50329  read-only
+FollowFocusPositionSetting       0x0194  50329  read-only
+FocusPositionSetting             0x020E      0  read-write
+FocusDrivingStatus               0x0767      1  read-only
+```
+
+Absolute focus positioning is therefore reachable on this body: a current
+position to read and a setting that reports itself writable. Not exercised —
+moving focus was out of scope for this session.
+
+**Zoom is exposed even on a lens that cannot motorise it.**
+
+```
+ZoomPositionCurrentValue  0x07A1  16384  read-only
+Zoom_Operation            0x0126      0  write-only
+ZoomDistance              0x014D  50000  read-only
+Zoom_Scale                0x0124   1000
+ZoomDrivingStatus         0x0792      1  read-only
+Zoom_Speed_Range          0x0724      0  read-only
+```
+
+**Lens information reads as absent and needs an explicit request.**
+
+```
+LensInformationEnableStatus  0x0756  0  read-only
+LensModelName                0x0765  0  read-only
+LensVersionNumber            0x075F  0  read-only
+ReleaseWithoutLens           0x0250  2  read-write
+```
+
+All three information properties read zero while autofocus works, and `FNumber`
+is read-only at f/16, so aperture is set on the lens. The vendor defines a
+`RequestLensInformation` operation with its own result warnings, which means
+lens metadata is *requested* rather than merely read. Any future lens-info
+support has to issue that request; polling these properties will keep returning
+zero.
+
+**Electronic framing state is exposed read-only, with writable crop settings.**
+
+```
+CameraEframing              0x01F2    1  read-only
+EframingType                0x07D1    1  read-only
+EframingCommandVersion      0x07D2  100
+EframingRecordingImageCrop  0x01F0    1  read-write
+EframingHDMICrop            0x01F1    2  read-write
+EframingSpeedPTZ            0x032C   50  read-write
+```
+
+**Interval recording is a complete writable family** (`0x01FC`–`0x0201` plus
+`Interval_Rec_Mode` `0x0505`), currently 30 shots at a 30-unit interval.
