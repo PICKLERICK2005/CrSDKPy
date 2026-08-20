@@ -127,9 +127,12 @@ record.
   Corrected 2026-08-20: an earlier note said delivery followed from the
   destination alone. It does not -- it also needs the save path below.
 - **A host-bound still needs a save path configured, or it goes nowhere.** The
-  vendor's own sample calls `SetSaveInfo` immediately after every successful
-  `Connect`. Without it, a capture whose destination includes the host
-  announces no postview at all -- three exposures across both control modes,
+  vendor documents this: postview delivery requires the output folder to have
+  been set with `SetSaveInfo()`, the still destination to include the host,
+  `Setting_Key_EnablePostView` to be Enable, and
+  `Setting_Key_PostViewTransferringType` to select RAM delivery. CrSDKPy was not
+  setting the save path at all. Without it, a capture whose destination includes
+  the host announces no postview -- three exposures across both control modes,
   with and without live view, produced not one delivery -- and
   `StillImageStoreDestination` then reports itself as not settable for the rest
   of that session, consistent with a transfer the camera is still holding.
@@ -154,7 +157,9 @@ record.
 - **The first `Connect` after an unclean shutdown is spent cleaning up.** If a
   previous consumer vanished without disconnecting, the camera still holds that
   transport session; the vendor accepts `Connect` and never delivers the
-  connection callback, so the attempt runs out its 15 s deadline. The failed
+  connection callback, so the attempt runs out CrSDKPy's own 15 s deadline. In a
+  heavier variant the attempt instead runs to the vendor's documented
+  five-minute reconnect-monitoring timeout, measured three times at 300.1 s. The failed
   attempt's own `Disconnect` is what clears the stale session, after which the
   next attempt connects in about 0.6 s. Reproduced deterministically by killing
   a host that held an open session.
@@ -182,3 +187,28 @@ record.
   therefore **not** a valid identity test for a preview, and the library does
   not treat it as one. Whether those bytes sit in a metadata segment or in the
   picture data has not been established yet.
+
+
+## Provenance of the notes above
+
+Anything in this file that describes an API *contract* — which call to make, what
+it returns, what must be released, which callback reports a result — comes from
+the vendor's API reference, operation-sequence pages and callback reference, and
+is not a CrSDKPy finding. What CrSDKPy contributes is measurement against one
+body: latencies, throughput, per-mode differences, refusal behaviour, property
+values, unknown codes, and the cases where a documented mechanism turned out to
+need a condition this library was not meeting.
+
+Two entries in the matrix are currently limited by CrSDKPy rather than by the
+camera, and are called out so they are not mistaken for hardware limits:
+
+- **String-valued properties read as `0`.** The backend reads only the numeric
+  accessor, so the vendor's string accessor is never consulted. Seven properties
+  on the reference body carry string values, including model name, serial number,
+  firmware version and lens identity. This is why lens identity was briefly
+  recorded as absent.
+- **Advertised value sets are discarded.** The vendor exposes each property's
+  permitted values or range, and 219 of 394 properties on the reference body
+  carry one. CrSDKPy populates neither `allowed_values` nor `value_range` for any
+  of them. Every typed facade — exposure, white balance, drive, focus range —
+  needs this data.

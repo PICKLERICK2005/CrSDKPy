@@ -559,10 +559,15 @@ AF-priority setting cannot be read to explain the refusal above.
 
 ## Corrections to earlier entries
 
-**Item 13 was incomplete.** Postview delivery does *not* follow from the
-destination alone. The vendor's own sample calls `SetSaveInfo` immediately after
-every successful `Connect`, and without it a capture whose destination includes
-the host announces no postview at all — three exposures across both control
+**Item 13 was incomplete, and the reason is documented.** Postview delivery does
+*not* follow from the destination alone. The vendor's API reference lists four
+conditions that must all hold: the output folder has been set with
+`SetSaveInfo()`; `StillImageStoreDestination` is HostPC or HostPCAndMemoryCard;
+`Setting_Key_EnablePostView` reads Enable; and `Setting_Key_PostViewTransferringType`
+is `CrPostViewTransferring_UserSelect_RAM` for RAM delivery. CrSDKPy was meeting
+neither the save-path condition nor, in some sessions, the transferring-type one.
+The save path is the part this library was missing outright, and without it a
+capture whose destination includes the host announces no postview at all — three exposures across both control
 modes, with and without live view, produced not one delivery — and
 `StillImageStoreDestination` then reports itself as not settable for the rest of
 that session, consistent with a transfer the camera is still holding. Twenty
@@ -574,9 +579,9 @@ Configuration acceptance does differ by mode, as originally recorded: `remote`
 refuses it, `remote_transfer` accepts it. Delivery worked in both once the save
 path existed.
 
-**Item 6 has a mechanism.** A `Connect` after a consumer vanished without
-disconnecting is accepted and then never delivers the connection callback, so it
-runs out its 15 s deadline. The failed attempt's own `Disconnect` is what clears
+**Item 6 has a mechanism, and part of it is documented.** A `Connect` after a
+consumer vanished without disconnecting is accepted and then never delivers the
+connection callback, so it runs out CrSDKPy's own 15 s deadline. The failed attempt's own `Disconnect` is what clears
 the camera's stale session, after which the next attempt connects in ~0.6 s.
 Reproduced deterministically by killing a host holding an open session: first
 open failed at 15.03 s, next succeeded at 0.59 s.
@@ -657,21 +662,47 @@ ZoomDrivingStatus         0x0792      1  read-only
 Zoom_Speed_Range          0x0724      0  read-only
 ```
 
-**Lens information reads as absent and needs an explicit request.**
+**Lens identity is present; it is the string value that was not being read.**
+
+> Corrected 2026-08-20 after auditing against the vendor API reference. An
+> earlier revision of this section said lens information "reads as absent and
+> needs an explicit request". That was wrong on both counts, and the reasoning
+> behind it is kept here only so the mistake is not repeated.
 
 ```
-LensInformationEnableStatus  0x0756  0  read-only
-LensModelName                0x0765  0  read-only
-LensVersionNumber            0x075F  0  read-only
-ReleaseWithoutLens           0x0250  2  read-write
+LensModelName                0x0765  numeric 0, string "FE 50mm F1.4 GM"
+LensVersionNumber            0x075F  numeric 0, string "01"
+LensInformationEnableStatus  0x0756  0 (Disable)   read-only
+ReleaseWithoutLens           0x0250  2             read-write
 ```
 
-All three information properties read zero while autofocus works, and `FNumber`
-is read-only at f/16, so aperture is set on the lens. The vendor defines a
-`RequestLensInformation` operation with its own result warnings, which means
-lens metadata is *requested* rather than merely read. Any future lens-info
-support has to issue that request; polling these properties will keep returning
-zero.
+These are string-typed properties. Reading only the numeric accessor returns
+zero for all of them, which is what CrSDKPy was doing; reading the string
+accessor returns the values above. Lens identity therefore needs no request at
+all — see the string-property gap recorded under this session's findings.
+
+`FNumber` is read-only at f/16, so aperture is set on the lens.
+
+The request family is a *separate* feature and the vendor documents its contract
+in full: `RequestLensInformation` is valid only with a compatible lens attached
+and "can be executed when `CrDeviceProperty_LensInformationEnableStatus` is
+Enable"; its outcome arrives as `CrWarning_RequestLensInformation_Result_*`;
+`GetLensInformation` "can be executed only once" per request and its list must be
+freed with `ReleaseLensInformation`; and `CrWarning_LensInformationChanged`
+signals that a re-request is needed after a lens change. `CrLensInformation`
+carries focus-distance data (`type` in feet or metres, `dataVersion`,
+`normalizedValue`, `focusPosition`) — not model or focal-length metadata.
+
+Measured on this body and lens: `LensInformationEnableStatus` reads **Disable**,
+so the documented precondition for the request is not met. The request was
+issued anyway and returned `CrError_None` with
+`CrWarning_RequestLensInformation_Result_Success`, yet `GetLensInformation`
+returned `CrError_Api_NoApplicableInformation` with a count of zero, before and
+after. The vendor documents that error as meaning either no
+lens-information-capable lens is attached or the request was not performed. Taken
+with the Disable status, the reading is that **the FE 50mm F1.4 GM does not
+provide focus-distance data on this body** — a lens capability limit, not a body
+or API limit. A lens that reports Enable is needed to exercise the family.
 
 **Electronic framing state is exposed read-only, with writable crop settings.**
 
@@ -686,3 +717,87 @@ EframingSpeedPTZ            0x032C   50  read-write
 
 **Interval recording is a complete writable family** (`0x01FC`–`0x0201` plus
 `Interval_Rec_Mode` `0x0505`), currently 30 shots at a 30-unit interval.
+
+
+---
+
+# Audit against the vendor API reference, 2026-08-20
+
+Everything above was re-read against the bundled API reference, operation-sequence
+pages, callback reference and samples. Provenance is now explicit, because
+"CrSDKPy measured this" and "the vendor specifies this" are different claims and
+only the first belongs in a characterization document.
+
+## Corrected: things the vendor documents that this file implied were findings
+
+- **The reconnect state machine.** "Changes in Camera Remote SDK connection
+  status" gives it as a table: removing the cable moves the SDK
+  `Connected -> Reconnecting`, replugging moves it `Reconnecting -> Connected`,
+  and the device handle is retained across both. No disconnect notification
+  appears in that path. So *the shape* of `connected -> reconnecting ->
+  connected` with a surviving session is specified, not observed here. What this
+  session contributes is the timing (11.7 s from the reconnecting notification)
+  and that live view resumed without being restarted.
+
+- **The five-minute stall now has a documented name.** The same table's third
+  case reads: cable removed, then "5 minutes passed", then
+  `Reconnecting -> Disconnected`. Reconnection monitoring is documented as valid
+  in Remote and RemoteTransfer modes, and `CrReconnecting_OFF` disables it. The
+  three measurements of 300.1 s (300149 / 300175 / 300132 ms) sit on that
+  five-minute boundary, so the previously unlocalized segment is the vendor's own
+  reconnect-monitoring timeout, entered because CrSDKPy always connects with
+  `CrReconnecting_ON`. This is no longer an unexplained hang; it is a documented
+  worst case that the library currently has no way to bound.
+
+- **`CrNotify_Captured_Event` as the authority for an exposure.** The capture
+  sequence page states it is notified through `OnWarning()` once the image is
+  saved to camera memory, and points at `CrDeviceProperty_FocusIndication` for
+  focus lock. Both were treated here as characterization; both are specified.
+
+- **Stable integer content identifiers.** `contentsId` and `fileId` are
+  documented as coming from `CrContentsInfo`, and the list is freed with
+  `ReleaseRemoteTransferContentsInfoList`. The transfer path being expressible
+  without holding a vendor content object is the documented design, not a way
+  around it that CrSDKPy found.
+
+## Corrected: a claim that was simply wrong
+
+- **Host+Card and the original file.** An earlier note recorded that Host+Card
+  "does not automatically deliver the original". The capture sequence page states
+  the opposite is intended: with the destination set to PC or PC-and-Camera the
+  captured image is automatically transmitted to the PC and
+  `OnCompleteDownload()` reports the stored path. What actually governs the size
+  is `CrDeviceProperty_StillImageTransSize`, whose values are documented as
+  `Original` (0) and `SmallSize` (1, "Small Size JPEG/HEIF"). That property was
+  measured at **1** on this body, which is exactly why a 1616x1080 JPEG arrived
+  instead of the 4240x2832 original. The property reports itself writable.
+  Setting it to `Original` and repeating the test is **untested** — the hardware
+  window closed first — so no claim is made about whether the FX3A honours it.
+
+- **The delivered JPEG was not evidence of contention.** It arrived because
+  `Setting_Key_PostViewTransferringType` defaults to
+  `CrPostViewTransferring_Legacy`, documented as "Output to File", and that run
+  never called the configuration that switches it to RAM. The earlier speculation
+  that the postview pull and the file write were competing is withdrawn.
+
+## Genuinely not specified by the vendor, and kept
+
+These are the facts a reader cannot get from the API reference, and they are the
+reason this document exists:
+
+- every measured latency and throughput figure in this file;
+- that a still capture with a host destination leaves
+  `StillImageStoreDestination` reporting itself not settable for the rest of that
+  session, and that a fresh session can change it immediately;
+- that a destination write takes 100-200 ms to become readable;
+- that the body can accept a release after a confirmed autofocus and produce no
+  exposure at all, with no event of any kind, at a rate that depends on pacing;
+- the numeric focus-mode mapping and that `FocusMode` reports read-only in MF;
+- that absolute focus positioning reaches the exact commanded value and repeats;
+- the two property codes absent from the vendor enumeration, and that they appear
+  only in Remote;
+- per-mode property counts and which capabilities each control mode exposes;
+- that the first content listing after opening a RemoteTransfer session can fail
+  as busy and succeed immediately afterwards;
+- that this lens reports `LensInformationEnableStatus` Disable and yields no
+  focus-distance data.

@@ -84,6 +84,35 @@ does is in `docs/FX3_CHARACTERIZATION.md`.
 - Two tests had never executed: they imported the fake host as `tests.fake_host`,
   which never resolves because `tests/` is not a package.
 
+## Unreleased
+
+### Documentation
+
+- Audited the characterization record against the vendor API reference and
+  restated provenance throughout. Several behaviours the record presented as
+  findings are specified by the vendor: the reconnect state transitions and the
+  retained device handle, `CrNotify_Captured_Event` as the authority for an
+  exposure, the four conditions postview delivery requires, and content
+  identifiers being plain integers taken from `CrContentsInfo`.
+- The five-minute session-open stall is the vendor's documented
+  reconnect-monitoring timeout, not an unlocalized hang. It is reached because
+  this library always connects with reconnection enabled.
+- Corrected the lens-information entry. Lens identity is a string-valued
+  property and needs no request; the request family concerns focus-distance data,
+  which the tested lens does not provide.
+- Corrected the note about host destinations and original files. The vendor
+  documents automatic transfer to the PC; the size is governed by
+  `StillImageTransSize`, which was set to SmallSize on the tested body.
+
+### Known gaps this audit exposed
+
+- String-valued properties are read through the numeric accessor only and
+  therefore report `0`, including model name, serial, firmware and lens identity.
+- Advertised value sets and ranges are never populated, though most properties
+  on the tested body carry one.
+- Only one of the two `OnNotifyRemoteTransferResult` overloads is implemented, so
+  the file-writing transfer variants report no progress or completion at all.
+
 ## 0.1.0b1
 
 First beta.
