@@ -79,6 +79,34 @@ def check_clean(session: crsdkpy.Session, stage: str) -> None:
         record(stage, "FAIL", f"cautions camera=0x{camera:X} system=0x{system:X}")
 
 
+def confirm_destination(
+    session: crsdkpy.Session,
+    want: crsdkpy.StillDestination,
+    *,
+    timeout_s: float = 8.0,
+) -> bool:
+    """Set the still destination and wait for the camera to report it.
+
+    A plain set-then-read is wrong here for two measured reasons: the camera
+    takes 100-200 ms to report the new value, so an immediate read still shows
+    the old one; and for a short window after a capture whose destination
+    included the host, the camera reports the property as not settable while it
+    finishes with that image. Both clear on their own, so this polls instead of
+    trusting one attempt.
+    """
+    deadline = time.monotonic() + timeout_s
+    while True:
+        if session.destination is want:
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        try:
+            session.set_destination(want)
+        except crsdkpy.UnsupportedOperationError:
+            pass  # transient after a host-destination capture; poll again
+        time.sleep(0.15)
+
+
 def describe(preview: crsdkpy.Preview) -> str:
     dimensions = jpeg_dimensions(preview.data)
     return (
@@ -290,12 +318,14 @@ def stage_postview_and_live_view(sdk: crsdkpy.SDK, *, live_view: bool) -> None:
     session = camera.open("remote")
     original = session.destination
     try:
-        session.set_destination(HOST_AND_CARD)
+        moved = confirm_destination(session, HOST_AND_CARD)
         record(
             "B.destination",
-            "ok",
+            "ok" if moved else "FAIL",
             f"{original.value} -> {session.destination.value}",
         )
+        if not moved:
+            return
         caps = session.capabilities
         record(
             "B.capabilities",
@@ -356,10 +386,10 @@ def stage_postview_and_live_view(sdk: crsdkpy.SDK, *, live_view: bool) -> None:
         check_clean(session, "B.cautions")
     finally:
         try:
-            session.set_destination(original)
+            back = confirm_destination(session, original)
             record(
                 "B.restore",
-                "ok",
+                "ok" if back else "FAIL",
                 f"destination back to {session.destination.value}",
             )
         finally:
@@ -445,8 +475,12 @@ def restore_and_verify(sdk: crsdkpy.SDK) -> None:
     with camera.open("remote") as session:
         if session.raw.half_press:
             session.raw.set_half_press(False)
-        if session.destination is not CARD:
-            session.set_destination(CARD)
+        if not confirm_destination(session, CARD):
+            record(
+                "restore.destination",
+                "FAIL",
+                f"stuck at {session.destination.value}",
+            )
         if session.video.state is not crsdkpy.RecordingState.IDLE:
             session.video.stop()
 
