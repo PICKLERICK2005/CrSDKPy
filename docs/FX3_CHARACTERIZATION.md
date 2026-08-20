@@ -465,3 +465,157 @@ The fake backend must implement the same internal interface as the real native b
 - Burst/continuous shooting.
 - Card-full, media-removal, and recording-failure paths.
 - Second supported body (A7-series) to separate FX3A quirks from generic CRSDK behavior.
+
+---
+
+# Session 2026-08-20 — library validation against the same body
+
+**Hardware:** Sony ILME-FX3A, firmware 2.02, CRSDK 2.02.00 (Win64), USB
+`Cr_PTP_USB`, PID `0x0F52`, connection version 300, on USB-PD power.
+**Under test:** the CrSDKPy public API through the host backend, not raw probes.
+**Exposures used:** 47 stills (content `131535`–`131581`) and one 3 s recording.
+
+Everything below was measured through the public API. Where it contradicts an
+earlier entry, the correction is stated rather than the old text edited.
+
+## Formal gates
+
+| Gate | Result | Evidence |
+|---|---|---|
+| R regressions | PASS | 10 checks: discovery, Remote open, 394 properties, cautions clear, battery, both media slots, ISO 1000→125→1000, capability reads, RemoteTransfer capabilities, clean teardown |
+| A content association | PASS | 20 checks, 2 exposures — see below |
+| B postview | PASS | 1616×1080, +128–184 ms after the exposure event |
+| C live view | PASS | 149 frames / 5 s, 29.7 fps, 640×428, 0 empty polls, 0 skipped |
+| D video | PASS | idle → recording → frame while recording → 3 s → idle |
+| M manual-focus capture | PASS | plain release in MF exposed at 771 ms |
+| N autofocus no-lock | PASS | refused at 3000 ms, no release issued, half-press verified clear |
+
+R + B/C + D also passed as one consolidated run: 27 checks, 0 failed, 0 skipped.
+
+## Capture timing, phase by phase
+
+Autofocus path, `remote_transfer`, card destination:
+
+```
+autofocus        694 – 794 ms
+exposure event  1491 – 1585 ms after the request
+content visible  490 – 639 ms after the exposure
+whole operation 2012 – 2103 ms
+```
+
+Plain release in MF, same session type:
+
+```
+exposure event   759 – 814 ms
+content visible  498 – 546 ms
+whole operation 1264 – 1354 ms
+```
+
+The autofocus path costs about 750 ms more, which is the focus phase. A baseline
+content read costs 5–13 ms. Scene was f/16, ISO 1000, shutter 0.6 s.
+
+## Accepted release with no exposure
+
+Field integrations reported capture times clustering near 11 s, 13 s and 20 s.
+Those are sums of this library's own deadlines, not camera latency:
+
+```
+11 s  ≈ 10 s exposure wait + ~1 s of real work
+13 s  ≈  3 s focus timeout + 10 s exposure wait
+20 s  ≈ two 10 s waits
+ 6 s  ≈  3 s focus timeout + 1.5 s half-press release
+```
+
+Driven back to back through the autofocus path, **5 of 22 captures produced no
+exposure at all**. In each case autofocus confirmed, the release was accepted,
+and the only subsequent events were focus reporting locked and then unlocked
+about 150 ms later. No capture event, no warning, no error, no new content, and
+the content-id sequence stayed contiguous — so the camera genuinely did not
+expose; nothing was lost in transit.
+
+Rate depends on how hard the body is driven:
+
+| Sequence | Exposed |
+|---|---|
+| autofocus, back to back | 17 / 22 |
+| autofocus, paced 1.5 s apart | 10 / 10 |
+| plain release in MF, back to back, faster 1.3 s cycle | 10 / 10 |
+
+Plain releases at a shorter cycle never failed, so this is the rapid
+re-assertion of autofocus rather than shutter or card throughput. There is no
+signal to detect it by except the absence of the capture event.
+
+## Focus mode values, measured
+
+| Property | AF-S | MF |
+|---|---|---|
+| `FocusMode` `0x0109` | `2`, read-write | `1`, **read-only** |
+| `FocusModeSetting` `0x0179` | `0` | `2` |
+| `PreAF` `0x0260` | `1` | `0` |
+
+`0x0109` becoming read-only in MF is expected: the switch is physical.
+`PriorityKeySettings` `0x011A` is **not supported** on this body, so an
+AF-priority setting cannot be read to explain the refusal above.
+
+## Corrections to earlier entries
+
+**Item 13 was incomplete.** Postview delivery does *not* follow from the
+destination alone. The vendor's own sample calls `SetSaveInfo` immediately after
+every successful `Connect`, and without it a capture whose destination includes
+the host announces no postview at all — three exposures across both control
+modes, with and without live view, produced not one delivery — and
+`StillImageStoreDestination` then reports itself as not settable for the rest of
+that session, consistent with a transfer the camera is still holding. Twenty
+attempts over ten seconds were refused while a fresh session changed it
+immediately. With the save path configured, postview arrives in 128–184 ms and
+the destination becomes settable again after at most one retry.
+
+Configuration acceptance does differ by mode, as originally recorded: `remote`
+refuses it, `remote_transfer` accepts it. Delivery worked in both once the save
+path existed.
+
+**Item 6 has a mechanism.** A `Connect` after a consumer vanished without
+disconnecting is accepted and then never delivers the connection callback, so it
+runs out its 15 s deadline. The failed attempt's own `Disconnect` is what clears
+the camera's stale session, after which the next attempt connects in ~0.6 s.
+Reproduced deterministically by killing a host holding an open session: first
+open failed at 15.03 s, next succeeded at 0.59 s.
+
+## Newly observed
+
+- **Transient busy on the first content listing.** Opening a RemoteTransfer
+  session and listing immediately can fail in ~1 ms with
+  `CrError_RemoteTransfer_GetContentsInfoListProcessing` (`0x8D05`) while the
+  camera builds its index; the next call succeeds. Seen in three of four
+  consecutive sessions. It is transient and must not be read as a lost link.
+- **Destination writes are not immediately observable.** `memory_card` ↔
+  `host_and_memory_card` switched six times in one session, each confirmed in
+  101–152 ms, but a read in the next statement still returns the old value.
+- **Screennail bytes still differ across transfers.** A refetch of the same
+  content returned the same 227005 bytes with a different digest, consistent
+  with the earlier finding. Byte equality is not an identity test.
+- **Reconnect needs no `OnDisconnected`.** With live view running, a USB
+  unplug/replug produced `connected → reconnecting (0x20002) → connected`, the
+  recovery flagged on the second connected event and no disconnect notification
+  at any point. 11.7 s from the reconnecting notification. The same session
+  object stayed usable: 394 properties readable, live view resumed unaided, a
+  following autofocus capture exposed in 1496 ms, identity unchanged, cautions
+  clear.
+- **The connection version is reported only on a first connect** (300 here), and
+  is absent from a recovery.
+
+## Remaining unknowns after this session
+
+Unchanged from the list above except that Remote+Host postview, fresh-capture
+content association, live view, video, destination writes and the reconnect path
+are no longer unknowns. Still open:
+
+- Remote + Card-only postview delivery.
+- Original-file transfer (`PullContentsFile`); deferred card ingest is the
+  current mechanism.
+- Why the body refuses a release after rapid autofocus, beyond the pacing
+  correlation.
+- Cable loss *during* a capture or recording, as opposed to while idle.
+- AF area positioning, focus-position stepping, burst, card-full and
+  media-removal paths.
+- A second body, to separate FX3A quirks from generic CRSDK behaviour.
