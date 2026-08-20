@@ -10,8 +10,10 @@ does is in `docs/FX3_CHARACTERIZATION.md`.
 
 ### Fixed
 
-- **A host-bound still had nowhere to go.** The vendor's own sample calls
-  `SetSaveInfo` immediately after every successful `Connect`; CrSDKPy never did.
+- **A host-bound still had nowhere to go.** The vendor documents four conditions
+  for postview delivery, the first being that the output folder has been set with
+  `SetSaveInfo()`; CrSDKPy never called it, and the vendor's own sample calls it
+  immediately after every successful `Connect`.
   Without it, a capture whose destination includes the host announced no
   postview at all — three exposures across both control modes, with and without
   live view, produced not one delivery — and `StillImageStoreDestination` then
@@ -48,6 +50,12 @@ does is in `docs/FX3_CHARACTERIZATION.md`.
   Exactly one retry, only for that condition — a vendor rejection of `Connect`
   is reported as-is. Measured: 15.03 s failure followed by a 0.59 s success.
 
+  A heavier variant of the same situation instead runs to the vendor's documented
+  five-minute reconnect-monitoring timeout, measured three times at 300.1 s, and
+  the retry does not recover it. Reconnection monitoring is always enabled by
+  this library, so that five minutes is the current worst case for a single open
+  and nothing bounds it. Treat it as open.
+
 ### Changed
 
 - Native ABI minor version 1 → 2: adds `crsdkpy_status_is_busy`, first-party
@@ -71,22 +79,6 @@ does is in `docs/FX3_CHARACTERIZATION.md`.
   focus releases at a faster cycle, 10 of 10. This is why a `Capture` reports
   progress rather than a success flag.
 
-### Tooling
-
-- `tools/capture_timing.py`: times a capture phase by phase and flags any phase
-  that ended on one of the library's own deadlines. Field reports of capture
-  times clustering near 11 s, 13 s and 20 s turned out to be sums of those
-  deadlines rather than camera latency.
-- `tools/hardware_validation.py`: confirms a destination change instead of
-  reading it back immediately, and tolerates the window after a
-  host-destination capture where the camera refuses the write. Previously stage
-  B could abort the run from inside its own cleanup, which skipped stage D.
-- Two tests had never executed: they imported the fake host as `tests.fake_host`,
-  which never resolves because `tests/` is not a package.
-
-## Unreleased
-
-### Documentation
 
 - Audited the characterization record against the vendor API reference and
   restated provenance throughout. Several behaviours the record presented as
@@ -112,6 +104,19 @@ does is in `docs/FX3_CHARACTERIZATION.md`.
   on the tested body carry one.
 - Only one of the two `OnNotifyRemoteTransferResult` overloads is implemented, so
   the file-writing transfer variants report no progress or completion at all.
+
+### Tooling
+
+- `tools/capture_timing.py`: times a capture phase by phase and flags any phase
+  that ended on one of the library's own deadlines. Field reports of capture
+  times clustering near 11 s, 13 s and 20 s turned out to be sums of those
+  deadlines rather than camera latency.
+- `tools/hardware_validation.py`: confirms a destination change instead of
+  reading it back immediately, and tolerates the window after a
+  host-destination capture where the camera refuses the write. Previously stage
+  B could abort the run from inside its own cleanup, which skipped stage D.
+- Two tests had never executed: they imported the fake host as `tests.fake_host`,
+  which never resolves because `tests/` is not a package.
 
 ## 0.1.0b1
 
