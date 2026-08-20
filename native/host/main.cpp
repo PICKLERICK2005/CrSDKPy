@@ -411,6 +411,35 @@ void dispatch(const crsdkpy_ipc_request& request,
         return;
     }
 
+    case CRSDKPY_OP_PROPERTY_STRING: {
+        const uint32_t code = static_cast<uint32_t>(request.i32_arg);
+        uint32_t length = 0;
+        int32_t status = crsdkpy_property_string(request.handle, code, nullptr,
+                                                 0, &length);
+        if (status != CRSDKPY_OK) {
+            fill(response, status, categorise(status), "");
+            attach_bridge_error(response);
+            return;
+        }
+        if (length == 0) {
+            fill(response, CRSDKPY_OK, CRSDKPY_CAT_NONE, "");
+            response.count = 0;
+            return;
+        }
+        std::vector<char> text(static_cast<size_t>(length) + 1, '\0');
+        status = crsdkpy_property_string(request.handle, code, text.data(),
+                                         static_cast<uint32_t>(text.size()),
+                                         &length);
+        if (status != CRSDKPY_OK) {
+            fill(response, status, categorise(status), "");
+            attach_bridge_error(response);
+            return;
+        }
+        fill(response, CRSDKPY_OK, CRSDKPY_CAT_NONE, text.data());
+        response.count = length;
+        return;
+    }
+
     case CRSDKPY_OP_TAKE_TRANSFER_PATH: {
         uint32_t length = 0;
         int32_t status =
@@ -426,7 +455,7 @@ void dispatch(const crsdkpy_ipc_request& request,
             attach_bridge_error(response);
             return;
         }
-        std::vector<char> path(static_cast<size_t>(length) + 1, ' ');
+        std::vector<char> path(static_cast<size_t>(length) + 1, '\0');
         status = crsdkpy_take_transfer_path(
             request.handle, path.data(),
             static_cast<uint32_t>(path.size()), &length);

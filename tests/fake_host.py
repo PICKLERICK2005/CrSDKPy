@@ -55,6 +55,13 @@ STATE = {
     "open_attempts": 0,
     "transfer_polls": 0,
     "transfer_path": "C:/saved/DSC09999.ARW",
+    # Values a caller should see for the string properties above.
+    "strings": {
+        0x07B2: "SIM-CAM-1",
+        0x079F: "0000000000",
+        0x0751: "9.99",
+        0x0765: "SIM 100mm F2.0",
+    },
     "next_slot": 1,
     "generation": 0,
     "events": [],
@@ -73,6 +80,14 @@ STATE = {
         0x0709: 1234,    # MediaSLOT1_RemainingNumber
         0x070A: 5678,    # MediaSLOT1_RemainingTime
         0x7FFE: 42,      # a deliberately unnamed code
+        # String-valued properties. The vendor reports zero through the numeric
+        # accessor for these, which is what the property array carries; the
+        # string arrives through its own call. Values here are invented, never
+        # copied from a real body.
+        0x07B2: 0,       # ModelName
+        0x079F: 0,       # BodySerialNumber
+        0x0751: 0,       # SoftwareVersion
+        0x0765: 0,       # LensModelName
     },
     "af_outcome": "focus",
     "mode": 0,             # control mode of the open session
@@ -132,7 +147,8 @@ def make_property(code: int, value: int) -> _cabi.PropertyStruct:
     prop = _cabi.PropertyStruct()
     prop.code = code
     prop.value = value
-    prop.value_type = 1
+    # 2 is the string value type; the rest are plain integers here.
+    prop.value_type = 2 if code in STATE["strings"] else 1
     prop.access = 3
     prop.allowed_count = 0
     return prop
@@ -606,6 +622,15 @@ def handle_request(out, request_id: int, meta: bytes) -> bool:
         item = make_property(request.u32_arg, known[request.u32_arg])
         respond(out, request_id, items=[item],
                 item_size=_cabi.ctypes.sizeof(_cabi.PropertyStruct))
+        return True
+
+    if op == _ipc.OP_PROPERTY_STRING:
+        text = STATE["strings"].get(request.u32_arg)
+        if text is None:
+            respond(out, request_id, count=0)
+        else:
+            encoded = text.encode("utf-8")
+            respond(out, request_id, message=encoded, count=len(encoded))
         return True
 
     if op == _ipc.OP_TEST_CRASH:

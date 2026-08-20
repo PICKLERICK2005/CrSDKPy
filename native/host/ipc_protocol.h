@@ -79,6 +79,9 @@ extern "C" {
 /* Copies out the path the camera reported for the last file-writing transfer.
  * An empty success means the session has none pending. */
 #define CRSDKPY_OP_TAKE_TRANSFER_PATH 20
+/* Reads a string-valued property as UTF-8. Empty success when the property
+ * carries no string. */
+#define CRSDKPY_OP_PROPERTY_STRING    21
 /* Test-only: makes the host terminate abruptly so process-death handling can
  * be exercised without provoking a real native fault. */
 #define CRSDKPY_OP_TEST_CRASH      900

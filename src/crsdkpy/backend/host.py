@@ -25,6 +25,7 @@ import sys
 import tempfile
 import threading
 from collections.abc import Sequence
+from dataclasses import replace
 from typing import Any, Optional
 
 from ..capabilities import SessionCapabilities
@@ -32,6 +33,7 @@ from ..clock import Clock, RealClock
 from ..enums import (
     ConnectionState,
     PreviewKind,
+    PropertyValueType,
     SessionMode,
     StillDestination,
 )
@@ -701,7 +703,35 @@ class HostBackend(
             _ipc.OP_LIST_PROPERTIES, handle=handle, operation="list_properties"
         )
         raws = _ipc.unpack_array(_cabi.PropertyStruct, blob, response.count)
-        return [decode_property(raw) for raw in raws]
+        return [self._with_string(session_id, decode_property(raw)) for raw in raws]
+
+    def _with_string(self, session_id: str, prop: Property) -> Property:
+        """Fill in the value of a string-valued property.
+
+        The vendor answers a property through one of two accessors and only one
+        is meaningful for a given type: a string property reports zero through
+        the numeric accessor, which is what the property array carries. So a
+        string is fetched for exactly those properties and for nothing else --
+        the numeric path is untouched, and on the reference body this is seven
+        properties out of several hundred.
+        """
+        if prop.value_type is not PropertyValueType.STRING:
+            return prop
+        try:
+            response, _ = self._call(
+                _ipc.OP_PROPERTY_STRING,
+                handle=self._handle(session_id, "property_string"),
+                u32=int(prop.code),
+                operation="property_string",
+            )
+        except CrSDKPyError:
+            # A property that will not answer as a string is reported as it
+            # arrived rather than failing the whole snapshot.
+            return prop
+        if response.count == 0:
+            return prop
+        text = response.message.decode("utf-8", "replace")
+        return replace(prop, value=text)
 
     def get_property(self, session_id: str, code: PropertyCode) -> Property:
         handle = self._handle(session_id, "get_property")
@@ -716,7 +746,7 @@ class HostBackend(
             raise PropertyNotSupportedError(
                 f"camera does not expose property {code}", code=int(code)
             )
-        return decode_property(raws[0])
+        return self._with_string(session_id, decode_property(raws[0]))
 
     # -- test hooks --------------------------------------------------------
     def _provoke_host_exit(self) -> None:

@@ -848,3 +848,53 @@ def test_an_unrecognised_transfer_code_keeps_the_vendor_value() -> None:
     assert event.outcome is crsdkpy.TransferOutcome.UNKNOWN
     assert event.notify_code == 0x2FFFF
     assert event.percent == 77
+
+
+def test_string_properties_report_their_string_not_zero() -> None:
+    """String-valued properties answer through a different vendor accessor.
+
+    Reading only the numeric accessor returns zero for every one of them, which
+    is how model name, body serial, firmware version and lens identity all came
+    back as 0 while the camera was reporting them perfectly well.
+    """
+    backend = make_backend()
+    try:
+        backend.start()
+        session = backend.open_session("cam-0", crsdkpy.SessionMode.REMOTE)
+
+        model = backend.get_property(session, crsdkpy.PropertyCode(0x07B2))
+        assert model.value_type is crsdkpy.PropertyValueType.STRING
+        assert model.value == "SIM-CAM-1"
+
+        lens = backend.get_property(session, crsdkpy.PropertyCode(0x0765))
+        assert lens.value == "SIM 100mm F2.0"
+        firmware = backend.get_property(session, crsdkpy.PropertyCode(0x0751))
+        assert firmware.value == "9.99"
+    finally:
+        backend.shutdown()
+
+
+def test_numeric_properties_are_untouched_by_the_string_path() -> None:
+    """The numeric path must not change, and must not pay for the string one."""
+    backend = make_backend()
+    try:
+        backend.start()
+        session = backend.open_session("cam-0", crsdkpy.SessionMode.REMOTE)
+        iso = backend.get_property(session, crsdkpy.PropertyCode(0x0104))
+        assert iso.value_type is crsdkpy.PropertyValueType.INT
+        assert iso.value == 100
+        assert isinstance(iso.value, int)
+    finally:
+        backend.shutdown()
+
+
+def test_a_snapshot_carries_strings_and_numbers_together() -> None:
+    backend = make_backend()
+    try:
+        backend.start()
+        session = backend.open_session("cam-0", crsdkpy.SessionMode.REMOTE)
+        by_code = {int(p.code): p for p in backend.list_properties(session)}
+        assert by_code[0x07B2].value == "SIM-CAM-1"
+        assert by_code[0x0104].value == 100
+    finally:
+        backend.shutdown()

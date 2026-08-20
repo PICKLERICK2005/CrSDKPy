@@ -80,6 +80,43 @@ std::string narrow(const CrChar* text)
 #endif
 }
 
+// Vendor strings are UTF-16 on Windows. Converted to UTF-8 rather than
+// narrowed, because a model or lens name is not guaranteed to be ASCII and
+// replacing what does not fit would corrupt it silently. A leading byte-order
+// mark is dropped: the camera includes one and it is not part of the value.
+std::string to_utf8(const CrInt16u* text)
+{
+    if (!text) return std::string();
+    std::string out;
+    for (const CrInt16u* p = text; *p; ++p) {
+        uint32_t cp = static_cast<uint32_t>(*p) & 0xFFFFu;
+        if (p == text && cp == 0xFEFF) continue;  // byte-order mark
+        if (cp >= 0xD800 && cp <= 0xDBFF && *(p + 1)) {
+            const uint32_t low = static_cast<uint32_t>(*(p + 1)) & 0xFFFFu;
+            if (low >= 0xDC00 && low <= 0xDFFF) {
+                cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
+                ++p;
+            }
+        }
+        if (cp < 0x80) {
+            out.push_back(static_cast<char>(cp));
+        } else if (cp < 0x800) {
+            out.push_back(static_cast<char>(0xC0 | (cp >> 6)));
+            out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+        } else if (cp < 0x10000) {
+            out.push_back(static_cast<char>(0xE0 | (cp >> 12)));
+            out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+            out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+        } else {
+            out.push_back(static_cast<char>(0xF0 | (cp >> 18)));
+            out.push_back(static_cast<char>(0x80 | ((cp >> 12) & 0x3F)));
+            out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+            out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+        }
+    }
+    return out;
+}
+
 // The inverse of narrow(), for the few vendor calls that take a path. Paths
 // are widened byte-for-byte, which covers ASCII; a non-ASCII path is rejected
 // by the caller rather than silently mangled here.
@@ -1282,6 +1319,40 @@ int32_t crsdkpy_get_property(uint64_t handle, uint32_t code, crsdkpy_property* o
     return CRSDKPY_OK;
 }
 
+
+int32_t crsdkpy_property_string(uint64_t handle, uint32_t code, char* out,
+                               uint32_t capacity, uint32_t* out_length)
+{
+    set_error("");
+    if (!out_length) return CRSDKPY_ERR_INVALID_ARG;
+    *out_length = 0;
+    if (capacity > 0 && !out) return CRSDKPY_ERR_INVALID_ARG;
+
+    std::lock_guard<std::mutex> lock(g_mutex);
+    auto session = resolve(handle);
+    if (!session) return CRSDKPY_ERR_INVALID_HANDLE;
+    if (session->state() != CRSDKPY_STATE_CONNECTED) return CRSDKPY_ERR_NOT_CONNECTED;
+
+    SDK::CrDeviceProperty* raw = nullptr;
+    CrInt32 count = 0;
+    CrInt32u wanted = code;
+    const auto error =
+        SDK::GetSelectDeviceProperties(session->handle(), 1, &wanted, &raw, &count);
+    PropertyList guard(session->handle(), raw);
+    if (error == SDK::CrError_Api_InvalidCalled || !raw || count < 1) {
+        set_error("the camera does not expose that property code");
+        return CRSDKPY_ERR_NOT_FOUND;
+    }
+    if (error != SDK::CrError_None) return static_cast<int32_t>(error);
+
+    // Copied before the owning list is released, like every other read here.
+    const std::string text = to_utf8(raw[0].GetCurrentStr());
+    *out_length = static_cast<uint32_t>(text.size());
+    if (capacity == 0) return CRSDKPY_OK;  // sizing call
+    if (text.size() + 1 > capacity) return CRSDKPY_ERR_BUFFER_TOO_SMALL;
+    copy_string(out, capacity, text);
+    return CRSDKPY_OK;
+}
 
 int32_t crsdkpy_set_property(uint64_t handle, uint32_t code, int64_t value)
 {

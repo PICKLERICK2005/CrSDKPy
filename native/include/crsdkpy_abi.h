@@ -287,6 +287,19 @@ CRSDKPY_API int32_t crsdkpy_last_error(char* buffer, uint32_t capacity);
  * deciding this from numeric literals elsewhere would duplicate it wrongly. */
 CRSDKPY_API int32_t crsdkpy_status_is_busy(int32_t status);
 
+/* Copies out a string-valued property as UTF-8.
+ *
+ * The vendor exposes a property's value through two accessors and only one of
+ * them is meaningful for a given data type: string properties answer through
+ * the string accessor and report zero through the numeric one. Callers reach
+ * this when a property's value type is STRING.
+ *
+ * Returns CRSDKPY_ERR_NOT_FOUND when the camera does not expose the code, and
+ * an empty success when the property carries no string. */
+CRSDKPY_API int32_t crsdkpy_property_string(uint64_t handle, uint32_t code,
+                                           char* out, uint32_t capacity,
+                                           uint32_t* out_length);
+
 /* Copies out the path the camera reported for the most recent file-writing
  * transfer, then forgets it. Returns CRSDKPY_ERR_NOT_FOUND when the session has
  * none pending. The vendor hands this to a callback as a string it owns, so it
