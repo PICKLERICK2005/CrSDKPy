@@ -21,8 +21,10 @@ recursive-include docs *.md *.json
 recursive-include examples *.py
 recursive-include tools *.py
 
-# Tests, so a downstream packager can verify the source they received.
+# Tests, so a downstream packager can verify the source they received. The
+# fixtures are part of that: without them the packaged suite cannot run.
 recursive-include tests *.py
+recursive-include tests/fixtures *.json
 
 # --- never ship -------------------------------------------------------------
 #
