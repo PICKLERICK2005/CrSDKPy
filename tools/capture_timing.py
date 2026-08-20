@@ -37,7 +37,6 @@ import crsdkpy
 # tolerance of one of these is evidence the wait expired rather than completed.
 DEADLINES_MS = {
     "focus": 3_000,
-    "half_press_release": 1_500,
     "exposure": 10_000,
     "content": 10_000,
 }
@@ -145,6 +144,20 @@ def run_iteration(session: crsdkpy.Session, index: int, mode: str) -> Row:
 
     row.total_ms = (time.monotonic() - t_start) * 1000
 
+    # A capture that produced no exposure reports no latency at all, so the
+    # check has to look at how long the call itself took. This is the case that
+    # matters: it is the accepted-release-with-no-exposure the whole tool exists
+    # to find, and comparing a missing latency would silently miss every one.
+    if not row.exposed and not row.error:
+        row.flags.append("NO-EXPOSURE")
+        # Measure the wait alone. The call also spent time focusing, and on
+        # hardware that was enough to push the total past the deadline it was
+        # being compared against -- 10740 ms of call for a 10000 ms wait -- so
+        # comparing the whole call would miss the very case this looks for.
+        waited = row.capture_ms - (row.focus_ms or 0)
+        if near_deadline("exposure", waited):
+            row.flags.append("HIT-EXPOSURE-DEADLINE")
+
     for name, elapsed in (
         ("focus", row.focus_ms),
         ("exposure", row.exposure_latency_ms),
@@ -225,10 +238,23 @@ def main() -> int:
         f"\n  exposed {len(exposed)}/{len(rows)}, "
         f"content resolved {len(resolved)}/{len(rows)}, "
         f"id advanced {len(advanced)}/{len(rows)}, "
-        f"deadline hits {len(flagged)}"
+        f"flagged {len(flagged)}"
     )
     for row in flagged:
-        print(f"    iteration {row.index}: {','.join(row.flags)}")
+        focus = (
+            f" focus={row.focus_state or '-'} via {row.focus_source or '-'}"
+            f" in {row.focus_ms} ms"
+            if row.focus_ms is not None
+            else ""
+        )
+        print(f"    iteration {row.index}: {','.join(row.flags)}{focus}")
+    if len(exposed) != len(rows):
+        print(
+            "\n  A capture flagged NO-EXPOSURE means the camera accepted the "
+            "release and\n  never exposed. It reports no event of any kind, "
+            "so the time went on the\n  exposure deadline rather than on the "
+            "camera. Re-run with --delay to see\n  whether pacing changes it."
+        )
     errors = [r for r in rows if r.error]
     for row in errors:
         print(f"    iteration {row.index} error: {row.error}")
