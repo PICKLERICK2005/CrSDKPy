@@ -41,6 +41,7 @@ from ..enums import (
     RecordingState,
     SessionMode,
     StillDestination,
+    TransferOutcome,
 )
 from ..errors import (
     CameraConnectionError,
@@ -56,6 +57,7 @@ from ..events import (
     FocusEvent,
     FocusSource,
     PropertyChangedEvent,
+    TransferEvent,
     UnknownEvent,
     WarningEvent,
 )
@@ -79,6 +81,17 @@ _ABI_TO_STATE = {
     2: ConnectionState.RECONNECTING,
     3: ConnectionState.CLOSING,
     4: ConnectionState.CLOSED,
+}
+
+_ABI_TO_TRANSFER_OUTCOME = {
+    _cabi.TRANSFER_IN_PROGRESS: TransferOutcome.IN_PROGRESS,
+    _cabi.TRANSFER_OK: TransferOutcome.OK,
+    _cabi.TRANSFER_FAILED: TransferOutcome.FAILED,
+    _cabi.TRANSFER_BUSY: TransferOutcome.BUSY,
+    _cabi.TRANSFER_STORAGE_FULL: TransferOutcome.STORAGE_FULL,
+    _cabi.TRANSFER_STOPPED: TransferOutcome.STOPPED,
+    _cabi.TRANSFER_CANCELED: TransferOutcome.CANCELED,
+    _cabi.TRANSFER_UNKNOWN: TransferOutcome.UNKNOWN,
 }
 
 _ABI_TO_ACCESS = {
@@ -424,6 +437,18 @@ def decode_event(
             recovered=bool(raw.i1),
             backend_code=int(raw.code) or None,
             connection_version=int(raw.i2) or None,
+        )
+    if raw.kind == _cabi.EVENT_TRANSFER:
+        return TransferEvent(
+            timestamp_ms=stamp,
+            outcome=_ABI_TO_TRANSFER_OUTCOME.get(
+                raw.i1, TransferOutcome.UNKNOWN
+            ),
+            percent=int(raw.i0),
+            # Kept even when the outcome is recognised: deciding what to retry
+            # is the caller's business and they may want the exact code.
+            notify_code=int(raw.code) or None,
+            has_path=bool(raw.i2),
         )
     if raw.kind == _cabi.EVENT_PROPERTY_CHANGED:
         return PropertyChangedEvent(

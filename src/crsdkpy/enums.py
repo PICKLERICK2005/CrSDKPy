@@ -19,6 +19,7 @@ __all__ = [
     "RecordingState",
     "SessionMode",
     "StillDestination",
+    "TransferOutcome",
 ]
 
 
@@ -138,6 +139,30 @@ class RecordingState(Enum):
     RECORDING = "recording"
     STOPPING = "stopping"
     FAILED = "failed"
+
+
+class TransferOutcome(Enum):
+    """Normalized outcome of a transfer request.
+
+    The camera reports progress and result through one notification, so a
+    transfer is a sequence of these rather than a single answer. ``UNKNOWN``
+    means the vendor sent a code this version does not recognise, which is not
+    an error: the raw code travels on the event beside it.
+    """
+
+    IN_PROGRESS = "in_progress"
+    OK = "ok"
+    FAILED = "failed"
+    BUSY = "busy"
+    STORAGE_FULL = "storage_full"
+    STOPPED = "stopped"
+    CANCELED = "canceled"
+    UNKNOWN = "unknown"
+
+    @property
+    def finished(self) -> bool:
+        """Whether this outcome ends the transfer, successfully or not."""
+        return self is not TransferOutcome.IN_PROGRESS
 
 
 class PreviewKind(Enum):

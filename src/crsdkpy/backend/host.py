@@ -807,6 +807,17 @@ class HostBackend(
         self._measurements.postview_delivered.add(session_id)
         return build_postview(blob, info, timestamp_ms=self._clock.now_ms())
 
+    def take_transfer_path(self, session_id: str) -> Optional[str]:
+        handle = self._handle(session_id, "take_transfer_path")
+        response, _ = self._call(
+            _ipc.OP_TAKE_TRANSFER_PATH,
+            handle=handle,
+            operation="take_transfer_path",
+        )
+        if response.count == 0:
+            return None  # nothing written yet
+        return response.message.decode("utf-8", "replace") or None
+
     # -- content index -----------------------------------------------------
     def _require_content_mode(
         self, session_id: str, operation: str, capability: str

@@ -119,6 +119,9 @@ class _Session:
         self.recording = RecordingState.IDLE
         self.postview_configured = False
         self.postview_pending: Optional[int] = None  # content id awaiting pull
+        #: Path the camera last reported for a file-writing transfer, waiting
+        #: to be collected.
+        self.transfer_path: Optional[str] = None
         self.contents: list[ContentRef] = []
         self.next_content_id = 131_000
         self.capture_sequence = 0
@@ -848,6 +851,12 @@ class SimulatedBackend(Backend):
                 operation="configure_postview",
             )
         session.postview_configured = bool(enabled)
+
+    def take_transfer_path(self, session_id: str) -> Optional[str]:
+        session = self._live_session(session_id, "take_transfer_path")
+        path = session.transfer_path
+        session.transfer_path = None
+        return path
 
     def pull_postview(self, session_id: str) -> Optional[Preview]:
         session = self._live_session(session_id, "pull_postview")

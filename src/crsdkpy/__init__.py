@@ -47,6 +47,7 @@ from .enums import (
     RecordingState,
     SessionMode,
     StillDestination,
+    TransferOutcome,
 )
 from .errors import (
     AutofocusFailedError,
@@ -73,6 +74,7 @@ from .events import (
     FocusSource,
     PropertyChangedEvent,
     RecordingEvent,
+    TransferEvent,
     UnknownEvent,
     WarningEvent,
 )
@@ -121,6 +123,7 @@ __all__ = [
     "CaptureEvent",
     "ContentEvent",
     "RecordingEvent",
+    "TransferEvent",
     "WarningEvent",
     "UnknownEvent",
     # capture and focus
@@ -144,6 +147,7 @@ __all__ = [
     "Video",
     "Recording",
     "RecordingState",
+    "TransferOutcome",
     # commands and clocks
     "Command",
     "CommandParameter",

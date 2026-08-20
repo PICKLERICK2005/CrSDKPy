@@ -758,3 +758,93 @@ def test_the_save_directory_is_not_the_vendor_runtime_directory() -> None:
 
     backend = make_backend()
     assert resolve_save_directory() != backend._adapter_dir
+
+
+def _drain_transfer_events(backend, session, attempts: int = 6) -> list:
+    seen = []
+    for _ in range(attempts):
+        seen.extend(
+            e for e in backend.poll_events(session, timeout_ms=0)
+            if isinstance(e, crsdkpy.TransferEvent)
+        )
+    return seen
+
+
+def test_a_file_writing_transfer_reports_progress_then_success() -> None:
+    """The result overload the vendor uses for file-writing transfers.
+
+    Those requests report through a different callback overload than the one
+    carrying bytes. With only the byte-carrying overload implemented, a transfer
+    wrote its file correctly and reported nothing at all, so a caller had no way
+    to know it had finished except by watching the filesystem.
+    """
+    backend = make_backend("transfer_file")
+    try:
+        backend.start()
+        session = backend.open_session("cam-0", crsdkpy.SessionMode.REMOTE)
+        events = _drain_transfer_events(backend, session)
+
+        outcomes = [e.outcome for e in events]
+        assert crsdkpy.TransferOutcome.IN_PROGRESS in outcomes
+        assert crsdkpy.TransferOutcome.OK in outcomes
+        # Progress must not read as an ending, or a caller stops waiting early.
+        progress = next(
+            e for e in events
+            if e.outcome is crsdkpy.TransferOutcome.IN_PROGRESS
+        )
+        assert not progress.outcome.finished
+        assert progress.percent == 40
+        assert not bool(progress)
+
+        done = next(
+            e for e in events if e.outcome is crsdkpy.TransferOutcome.OK
+        )
+        assert done.outcome.finished
+        assert bool(done)
+        assert done.percent == 100
+        assert done.has_path
+        # The vendor code survives even though the outcome was recognised.
+        assert done.notify_code == 0x20100
+
+        # The path is collected separately and consumed once.
+        assert backend.take_transfer_path(session) == "C:/saved/DSC09999.ARW"
+        assert backend.take_transfer_path(session) is None
+    finally:
+        backend.shutdown()
+
+
+def test_a_failed_transfer_is_finished_but_not_successful() -> None:
+    """A caller waiting for the end must not wait forever on a failure."""
+    backend = make_backend("transfer_file_ng")
+    try:
+        backend.start()
+        session = backend.open_session("cam-0", crsdkpy.SessionMode.REMOTE)
+        events = _drain_transfer_events(backend, session)
+
+        failure = next(
+            e for e in events
+            if e.outcome is crsdkpy.TransferOutcome.FAILED
+        )
+        assert failure.outcome.finished  # the wait ends
+        assert not bool(failure)         # but nothing was produced
+        assert not failure.has_path
+        assert backend.take_transfer_path(session) is None
+    finally:
+        backend.shutdown()
+
+
+def test_an_unrecognised_transfer_code_keeps_the_vendor_value() -> None:
+    """A newer camera reporting something new is not an error."""
+    from crsdkpy.backend import _cabi
+    from crsdkpy.backend.native import decode_event
+
+    raw = _cabi.EventStruct()
+    raw.kind = _cabi.EVENT_TRANSFER
+    raw.code = 0x2FFFF          # not in this version's mapping
+    raw.i0 = 77
+    raw.i1 = _cabi.TRANSFER_UNKNOWN
+    event = decode_event(raw, timestamp_ms=5)
+
+    assert event.outcome is crsdkpy.TransferOutcome.UNKNOWN
+    assert event.notify_code == 0x2FFFF
+    assert event.percent == 77

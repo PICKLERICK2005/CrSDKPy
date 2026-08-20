@@ -47,7 +47,7 @@ extern "C" {
 /* Bump the major component on any incompatible layout or signature change.
  * Python refuses to load a library whose major version it does not know. */
 #define CRSDKPY_ABI_VERSION_MAJOR 1
-#define CRSDKPY_ABI_VERSION_MINOR 2
+#define CRSDKPY_ABI_VERSION_MINOR 3
 
 /* ---- status codes ---------------------------------------------------- */
 #define CRSDKPY_OK                    0
@@ -88,6 +88,10 @@ extern "C" {
 #define CRSDKPY_EVENT_WARNING          5
 #define CRSDKPY_EVENT_ERROR            6
 #define CRSDKPY_EVENT_RAW              7
+/* Progress or outcome of a remote-transfer request. The vendor reports these
+ * through a different callback overload than the one that carries bytes, so a
+ * file-writing transfer is only observable here. */
+#define CRSDKPY_EVENT_TRANSFER         8
 
 /* Warning codes raised by the bridge itself rather than by the vendor. Kept in
  * a range the vendor does not use so a caller can always tell the two apart,
@@ -99,6 +103,19 @@ extern "C" {
 #define CRSDKPY_WARN_SAVE_PATH_UNUSABLE (CRSDKPY_WARN_FIRST_PARTY_BASE + 1u)
 /* The camera refused the save path; i0 carries the vendor error. */
 #define CRSDKPY_WARN_SAVE_PATH_REFUSED  (CRSDKPY_WARN_FIRST_PARTY_BASE + 2u)
+
+/* Normalized outcome of a remote transfer, carried in a transfer event's i1.
+ * The vendor's own notify code travels alongside it in `code`, so a value this
+ * bridge does not recognise is still visible to the caller rather than being
+ * flattened into "unknown". */
+#define CRSDKPY_TRANSFER_IN_PROGRESS  0
+#define CRSDKPY_TRANSFER_OK           1
+#define CRSDKPY_TRANSFER_FAILED       2
+#define CRSDKPY_TRANSFER_BUSY         3
+#define CRSDKPY_TRANSFER_STORAGE_FULL 4
+#define CRSDKPY_TRANSFER_STOPPED      5
+#define CRSDKPY_TRANSFER_CANCELED     6
+#define CRSDKPY_TRANSFER_UNKNOWN      7
 
 /* Which channel reported a focus state. The two use different vendor
  * enumerations and neither is reliably first. */
@@ -269,6 +286,14 @@ CRSDKPY_API int32_t crsdkpy_last_error(char* buffer, uint32_t capacity);
  * Lives here because only the bridge links the vendor's error enumeration, and
  * deciding this from numeric literals elsewhere would duplicate it wrongly. */
 CRSDKPY_API int32_t crsdkpy_status_is_busy(int32_t status);
+
+/* Copies out the path the camera reported for the most recent file-writing
+ * transfer, then forgets it. Returns CRSDKPY_ERR_NOT_FOUND when the session has
+ * none pending. The vendor hands this to a callback as a string it owns, so it
+ * is copied on arrival and only ever leaves here as caller memory. */
+CRSDKPY_API int32_t crsdkpy_take_transfer_path(uint64_t handle, char* out,
+                                              uint32_t capacity,
+                                              uint32_t* out_length);
 
 /* Initialise the vendor SDK. Idempotent per process.
  *

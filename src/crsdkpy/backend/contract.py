@@ -285,6 +285,19 @@ class Backend:
     def pull_postview(self, session_id: str) -> Optional[Preview]:  # pragma: no cover
         raise NotImplementedError
 
+    def take_transfer_path(self, session_id: str) -> Optional[str]:
+        """Collect the path the camera reported for the last written transfer.
+
+        Returns ``None`` when there is none to collect, which is the ordinary
+        case while a transfer is still running. The path is consumed: a second
+        call returns ``None`` until another transfer completes.
+
+        Separate from the event stream because the camera reports the path as a
+        string it owns, so a backend has to copy it out rather than hand it
+        across as-is.
+        """
+        raise NotImplementedError  # pragma: no cover
+
     def latest_content(  # pragma: no cover
         self, session_id: str
     ) -> Optional[ContentRef]:

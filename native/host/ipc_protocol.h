@@ -76,6 +76,9 @@ extern "C" {
 #define CRSDKPY_OP_PULL_POSTVIEW      17
 #define CRSDKPY_OP_LIVE_VIEW_INFO     18
 #define CRSDKPY_OP_LIVE_VIEW_FRAME    19
+/* Copies out the path the camera reported for the last file-writing transfer.
+ * An empty success means the session has none pending. */
+#define CRSDKPY_OP_TAKE_TRANSFER_PATH 20
 /* Test-only: makes the host terminate abruptly so process-death handling can
  * be exercised without provoking a real native fault. */
 #define CRSDKPY_OP_TEST_CRASH      900

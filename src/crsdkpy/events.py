@@ -13,7 +13,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from .enums import ConnectionState, FocusState, RecordingState
+from .enums import (
+    ConnectionState,
+    FocusState,
+    RecordingState,
+    TransferOutcome,
+)
 from .properties import PropertyCode
 
 __all__ = [
@@ -25,6 +30,8 @@ __all__ = [
     "FocusSource",
     "PropertyChangedEvent",
     "RecordingEvent",
+    "TransferEvent",
+    "TransferOutcome",
     "UnknownEvent",
     "WarningEvent",
 ]
@@ -111,6 +118,25 @@ class ContentEvent(Event):
     content_id: Optional[int] = None
     file_number: Optional[int] = None
     path: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class TransferEvent(Event):
+    """Progress or outcome of a transfer the caller asked for.
+
+    ``path`` is not carried here. The camera reports it as a string it owns, so
+    the backend copies it and hands it over separately; ``has_path`` says whether
+    there is one to collect.
+    """
+
+    outcome: TransferOutcome = TransferOutcome.UNKNOWN
+    percent: int = 0
+    #: The vendor's own notification code, preserved even when recognised.
+    notify_code: Optional[int] = None
+    has_path: bool = False
+
+    def __bool__(self) -> bool:
+        return self.outcome is TransferOutcome.OK
 
 
 @dataclass(frozen=True)

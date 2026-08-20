@@ -30,6 +30,9 @@ Run as ``python fake_host.py [behaviour]``. Behaviours:
     connect_timeout_always
                       every session open reports the connection-callback
                       timeout
+    transfer_file     a file-writing transfer reports progress then success,
+                      with a written path to collect
+    transfer_file_ng  a file-writing transfer reports progress then failure
 """
 
 from __future__ import annotations
@@ -50,6 +53,8 @@ STATE = {
     "cameras": [],
     "sessions": {},        # handle -> {"generation": int, "open": bool}
     "open_attempts": 0,
+    "transfer_polls": 0,
+    "transfer_path": "C:/saved/DSC09999.ARW",
     "next_slot": 1,
     "generation": 0,
     "events": [],
@@ -133,12 +138,14 @@ def make_property(code: int, value: int) -> _cabi.PropertyStruct:
     return prop
 
 
-def make_event(kind: int, code: int, i0: int = 0, i1: int = 0) -> _cabi.EventStruct:
+def make_event(kind: int, code: int, i0: int = 0, i1: int = 0,
+               i2: int = 0) -> _cabi.EventStruct:
     event = _cabi.EventStruct()
     event.kind = kind
     event.code = code
     event.i0 = i0
     event.i1 = i1   # focus events use this to name the reporting channel
+    event.i2 = i2   # transfer events use this to flag an available path
     event.timestamp_ms = 1234
     return event
 
@@ -315,6 +322,17 @@ def handle_request(out, request_id: int, meta: bytes) -> bool:
                 item_size=_cabi.ctypes.sizeof(_cabi.CameraInfoStruct))
         return True
 
+    if op == _ipc.OP_TAKE_TRANSFER_PATH:
+        # Only the success behaviour ever produces a path, and it is consumed
+        # once, exactly as the real host does.
+        if BEHAVIOUR == "transfer_file" and STATE["transfer_path"]:
+            path = STATE["transfer_path"].encode()
+            STATE["transfer_path"] = ""
+            respond(out, request_id, message=path, count=len(path))
+        else:
+            respond(out, request_id, count=0)
+        return True
+
     if op == _ipc.OP_OPEN_SESSION:
         # The camera was still holding a previous transport session, so Connect
         # was accepted and the connection callback never came. A real host has
@@ -371,6 +389,24 @@ def handle_request(out, request_id: int, meta: bytes) -> bool:
         return True
 
     if op == _ipc.OP_POLL_EVENTS:
+        # A file-writing transfer reports progress and then an outcome through
+        # the same notification, so the poll hands them out in that order.
+        if BEHAVIOUR in ("transfer_file", "transfer_file_ng"):
+            step = STATE["transfer_polls"]
+            STATE["transfer_polls"] += 1
+            if step == 0:
+                STATE["events"].append(
+                    make_event(_cabi.EVENT_TRANSFER, 0x2010C, 40,
+                               _cabi.TRANSFER_IN_PROGRESS, 0))
+            elif step == 1:
+                ok = BEHAVIOUR == "transfer_file"
+                STATE["events"].append(
+                    make_event(
+                        _cabi.EVENT_TRANSFER,
+                        0x20100 if ok else 0x20101,
+                        100,
+                        _cabi.TRANSFER_OK if ok else _cabi.TRANSFER_FAILED,
+                        1 if ok else 0))
         items = STATE["events"]
         STATE["events"] = []
         respond(out, request_id, items=items,

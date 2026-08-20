@@ -411,6 +411,35 @@ void dispatch(const crsdkpy_ipc_request& request,
         return;
     }
 
+    case CRSDKPY_OP_TAKE_TRANSFER_PATH: {
+        uint32_t length = 0;
+        int32_t status =
+            crsdkpy_take_transfer_path(request.handle, nullptr, 0, &length);
+        if (status == CRSDKPY_ERR_NOT_FOUND) {
+            // Ordinary: nothing has been written yet. The caller polls this.
+            fill(response, CRSDKPY_OK, CRSDKPY_CAT_NONE, "");
+            response.count = 0;
+            return;
+        }
+        if (status != CRSDKPY_OK) {
+            fill(response, status, categorise(status), "");
+            attach_bridge_error(response);
+            return;
+        }
+        std::vector<char> path(static_cast<size_t>(length) + 1, ' ');
+        status = crsdkpy_take_transfer_path(
+            request.handle, path.data(),
+            static_cast<uint32_t>(path.size()), &length);
+        if (status != CRSDKPY_OK) {
+            fill(response, status, categorise(status), "");
+            attach_bridge_error(response);
+            return;
+        }
+        fill(response, CRSDKPY_OK, CRSDKPY_CAT_NONE, path.data());
+        response.count = length;
+        return;
+    }
+
     case CRSDKPY_OP_PULL_POSTVIEW: {
         crsdkpy_postview_info info;
         std::memset(&info, 0, sizeof(info));

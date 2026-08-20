@@ -279,6 +279,13 @@ public:
                                                    CrInt32u added) override;
     void OnNotifyRemoteTransferResult(CrInt32u notify, CrInt32u per,
                                       CrInt8u* data, CrInt64u size) override;
+    // The vendor declares two overloads of this callback. The one above
+    // carries bytes and serves the requests that deliver data; this one
+    // carries the written path and serves the requests that write a file. They
+    // are separate virtuals, so implementing only one compiles cleanly and
+    // silently loses every result the other would have reported.
+    void OnNotifyRemoteTransferResult(CrInt32u notify, CrInt32u per,
+                                      CrChar* filename) override;
     void OnNotifyPostViewImage(CrChar* filename, CrInt32u size) override;
 
 private:
@@ -613,6 +620,37 @@ public:
         condition_.notify_all();
     }
 
+    // -- file-writing transfers --------------------------------------------
+
+    void on_transfer_file_result(int32_t outcome, uint32_t notify,
+                                 uint32_t percent, const std::string& path)
+    {
+        if (!path.empty()) {
+            std::lock_guard<std::mutex> lock(transfer_mutex_);
+            transfer_path_ = path;
+        }
+        push(CRSDKPY_EVENT_TRANSFER, notify, static_cast<int32_t>(percent),
+             outcome, path.empty() ? 0 : 1, 0);
+        transfer_condition_.notify_all();
+    }
+
+    // Non-destructive, so a caller can size a buffer without consuming the
+    // result it is about to ask for.
+    size_t transfer_path_size()
+    {
+        std::lock_guard<std::mutex> lock(transfer_mutex_);
+        return transfer_path_.size();
+    }
+
+    bool take_transfer_path(std::string* out)
+    {
+        std::lock_guard<std::mutex> lock(transfer_mutex_);
+        if (transfer_path_.empty()) return false;
+        if (out) *out = transfer_path_;
+        transfer_path_.clear();
+        return true;
+    }
+
     void note_property_activity() { last_property_ms_.store(now_ms()); }
     int64_t last_property_ms() const { return last_property_ms_.load(); }
 
@@ -673,6 +711,7 @@ private:
     std::mutex transfer_mutex_;
     std::condition_variable transfer_condition_;
     PendingTransfer transfer_;
+    std::string transfer_path_;
 
     std::mutex postview_mutex_;
     PostviewPending postview_;
@@ -756,6 +795,39 @@ void Callback::OnNotifyRemoteTransferContentsListChanged(CrInt32u notify,
     // than as the identity of a new item.
     session_->push(CRSDKPY_EVENT_CONTENT, notify, static_cast<int32_t>(slot),
                    static_cast<int32_t>(added), 0, 0);
+}
+
+// Maps a vendor notify code onto the normalized outcome. Anything unrecognised
+// stays visible: the caller still receives the raw code.
+static int32_t transfer_outcome(CrInt32u notify)
+{
+    switch (notify) {
+    case SDK::CrNotify_RemoteTransfer_InProgress:
+        return CRSDKPY_TRANSFER_IN_PROGRESS;
+    case SDK::CrNotify_RemoteTransfer_Result_OK:
+        return CRSDKPY_TRANSFER_OK;
+    case SDK::CrNotify_RemoteTransfer_Result_NG:
+        return CRSDKPY_TRANSFER_FAILED;
+    case SDK::CrNotify_RemoteTransfer_Result_DeviceBusy:
+        return CRSDKPY_TRANSFER_BUSY;
+    case SDK::CrWarning_File_StorageFull:
+        return CRSDKPY_TRANSFER_STORAGE_FULL;
+    case SDK::CrNotify_RemoteTransfer_Control_Stopped:
+        return CRSDKPY_TRANSFER_STOPPED;
+    case SDK::CrNotify_RemoteTransfer_Control_Canceled:
+        return CRSDKPY_TRANSFER_CANCELED;
+    default:
+        return CRSDKPY_TRANSFER_UNKNOWN;
+    }
+}
+
+void Callback::OnNotifyRemoteTransferResult(CrInt32u notify, CrInt32u per,
+                                            CrChar* filename)
+{
+    // Copied here: the string belongs to the vendor and is not valid once this
+    // returns.
+    session_->on_transfer_file_result(transfer_outcome(notify), notify, per,
+                                      narrow(filename));
 }
 
 void Callback::OnNotifyRemoteTransferResult(CrInt32u notify, CrInt32u per,
@@ -1526,6 +1598,39 @@ int32_t crsdkpy_pull_postview(uint64_t handle, crsdkpy_postview_info* out_info)
     out_info->pulled_ms = pulled;
     copy_string(out_info->filename, sizeof(out_info->filename), pending.filename);
     session->hold_postview(std::move(buffer), pulled);
+    return CRSDKPY_OK;
+}
+
+int32_t crsdkpy_take_transfer_path(uint64_t handle, char* out,
+                                  uint32_t capacity, uint32_t* out_length)
+{
+    set_error("");
+    if (!out_length) return CRSDKPY_ERR_INVALID_ARG;
+    *out_length = 0;
+    if (capacity > 0 && !out) return CRSDKPY_ERR_INVALID_ARG;
+
+    std::shared_ptr<Session> session;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        session = resolve(handle);
+        if (!session) return CRSDKPY_ERR_INVALID_HANDLE;
+    }
+    const size_t held = session->transfer_path_size();
+    if (held == 0) {
+        set_error("no transfer path is being held for this session");
+        return CRSDKPY_ERR_NOT_FOUND;
+    }
+    *out_length = static_cast<uint32_t>(held);
+    if (capacity == 0) return CRSDKPY_OK;  // sizing call, nothing consumed
+    if (held + 1 > capacity) return CRSDKPY_ERR_BUFFER_TOO_SMALL;
+
+    std::string path;
+    if (!session->take_transfer_path(&path)) {
+        set_error("no transfer path is being held for this session");
+        return CRSDKPY_ERR_NOT_FOUND;
+    }
+    *out_length = static_cast<uint32_t>(path.size());
+    copy_string(out, capacity, path);
     return CRSDKPY_OK;
 }
 
