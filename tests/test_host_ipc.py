@@ -669,3 +669,28 @@ def test_host_stderr_is_not_the_protocol_stream() -> None:
     )
     assert completed.stdout.startswith(b"this is not a frame")
     assert completed.stderr == b""
+
+
+def test_busy_is_not_reported_as_a_broken_connection() -> None:
+    """A busy camera must stay distinguishable from a dead one.
+
+    Hardware reaches this: the first content listing after opening a
+    RemoteTransfer session can arrive while the camera is still building its
+    index, and fails in about a millisecond with a vendor code the next call
+    does not produce. Reporting that as a connection error invites a caller to
+    tear down a session that is perfectly healthy, so the category has to
+    survive the trip across the wire as its own thing.
+    """
+    response = _ipc.ResponseStruct()
+    response.status = 0x8D05  # CrError_RemoteTransfer_GetContentsInfoListProcessing
+    response.category = _ipc.CAT_BUSY
+    response.message = b"the camera is still building its content index"
+
+    error = HostBackend._to_exception(response, "list_content")
+
+    assert isinstance(error, crsdkpy.CameraBusyError)
+    assert not isinstance(error, crsdkpy.CameraConnectionError)
+    # The vendor code is preserved, because deciding whether to retry is the
+    # caller's business and it may want to know exactly what happened.
+    assert error.backend_code == 0x8D05
+    assert error.operation == "list_content"

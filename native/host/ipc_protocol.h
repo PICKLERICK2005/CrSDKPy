@@ -93,6 +93,10 @@ extern "C" {
 #define CRSDKPY_CAT_NOT_CONNECTED 8
 #define CRSDKPY_CAT_TIMEOUT       9
 #define CRSDKPY_CAT_NOT_FOUND    10
+/* Refused because the camera is busy with something else. Transient by
+ * definition: the same call is expected to succeed shortly afterwards, so it
+ * must not be reported as a broken connection. */
+#define CRSDKPY_CAT_BUSY         11
 
 #pragma pack(push, 1)
 

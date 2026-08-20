@@ -1001,6 +1001,21 @@ int32_t crsdkpy_camera_at(uint32_t index, crsdkpy_camera_info* out)
     return CRSDKPY_OK;
 }
 
+int32_t crsdkpy_status_is_busy(int32_t status)
+{
+    switch (static_cast<CrInt32u>(status)) {
+    // Observed on hardware: the first content listing after opening a
+    // RemoteTransfer session can land while the camera is still building its
+    // index. It fails in about a millisecond and the next call succeeds.
+    case SDK::CrError_RemoteTransfer_GetContentsInfoListProcessing:
+    case SDK::CrError_Adaptor_DeviceBusy:
+    case SDK::CrError_Connect_FailBusy:
+        return 1;
+    default:
+        return 0;
+    }
+}
+
 int32_t crsdkpy_open_session(const char* device_key, int32_t mode,
                              uint64_t* out_handle)
 {

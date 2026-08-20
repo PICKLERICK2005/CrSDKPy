@@ -131,6 +131,9 @@ int32_t categorise(int32_t status)
 {
     if (status == CRSDKPY_OK) return CRSDKPY_CAT_NONE;
     if (status > 0) {
+        // Busy is transient and must not look like a broken connection, or a
+        // caller tears down a session that is perfectly healthy.
+        if (crsdkpy_status_is_busy(status)) return CRSDKPY_CAT_BUSY;
         // The adaptor family is the known executable-directory failure.
         return ((status & 0xFF00) == 0x8700) ? CRSDKPY_CAT_ADAPTER_PATH
                                              : CRSDKPY_CAT_VENDOR;

@@ -47,7 +47,7 @@ extern "C" {
 /* Bump the major component on any incompatible layout or signature change.
  * Python refuses to load a library whose major version it does not know. */
 #define CRSDKPY_ABI_VERSION_MAJOR 1
-#define CRSDKPY_ABI_VERSION_MINOR 1
+#define CRSDKPY_ABI_VERSION_MINOR 2
 
 /* ---- status codes ---------------------------------------------------- */
 #define CRSDKPY_OK                    0
@@ -264,6 +264,11 @@ CRSDKPY_API int32_t crsdkpy_abi_version(void);
 /* Human-readable description of the last failure on the calling thread.
  * Copies into caller memory; never returns vendor-owned storage. */
 CRSDKPY_API int32_t crsdkpy_last_error(char* buffer, uint32_t capacity);
+
+/* Whether a vendor status means "busy, try again" rather than a real failure.
+ * Lives here because only the bridge links the vendor's error enumeration, and
+ * deciding this from numeric literals elsewhere would duplicate it wrongly. */
+CRSDKPY_API int32_t crsdkpy_status_is_busy(int32_t status);
 
 /* Initialise the vendor SDK. Idempotent per process.
  *

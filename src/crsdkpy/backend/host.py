@@ -36,6 +36,7 @@ from ..enums import (
 )
 from ..errors import (
     BackendError,
+    CameraBusyError,
     CameraConnectionError,
     CrSDKPyError,
     NativeBackendError,
@@ -498,6 +499,12 @@ class HostBackend(
             return OperationTimeoutError(message, operation=operation)
         if category == _ipc.CAT_NOT_FOUND:
             return PropertyNotSupportedError(message)
+        if category == _ipc.CAT_BUSY:
+            # Transient. Reporting a connection error here would invite a
+            # caller to tear down a session that is perfectly healthy.
+            return CameraBusyError(
+                message, operation=operation, backend_code=code
+            )
         if category == _ipc.CAT_INVALID_ARG:
             return BackendError(message, operation=operation, backend_code=code)
         return CameraConnectionError(
