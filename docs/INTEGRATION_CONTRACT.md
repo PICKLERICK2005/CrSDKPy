@@ -107,5 +107,27 @@ a backend describing something this release has never heard of stays usable.
   every transfer.
 - **Unsupported operations raise** `UnsupportedOperationError` naming the
   capability, rather than returning something falsy.
+- **A busy camera raises `CameraBusyError`, not a connection error.** It is
+  transient and the same call is expected to work shortly afterwards, so do not
+  tear the session down over it. The vendor code is on `backend_code`; the first
+  content listing after opening a RemoteTransfer session is the case that
+  actually occurs, failing in about a millisecond with `0x8D05`.
+- **A reconnect does not require a disconnect.** The state machine must accept
+  `connected -> reconnecting -> connected` with no disconnect notification in
+  between, because that is what the reference body does.
+  `ConnectionEvent.recovered` is set only on a recovery; it is **not** set on a
+  first connect. `ConnectionEvent.connection_version` is the reverse: reported
+  on a first connect and absent from a recovery. Watch `recovered` if you need
+  to resynchronise state after a link came back.
+- **A still whose destination includes the host needs a save directory**, which
+  the library configures for you. Override it with `CRSDKPY_SAVE_DIR` or
+  `HostBackend(save_directory=...)`; the default is a directory under the
+  system temporary directory. Without one configured the camera announces no
+  postview and leaves the destination property unsettable for the rest of the
+  session, so this is not optional -- but it is handled, and an integrator does
+  not have to think about it unless they want the files somewhere specific.
+- **Writing the still destination is not immediately observable.** Reading it
+  back in the next statement returns the old value; the change takes 100-200 ms
+  to be reported. Poll for it rather than trusting one read.
 - **The property count is a live figure.** Never assert it.
 - **Closing anything is idempotent.**
