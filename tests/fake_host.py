@@ -55,6 +55,16 @@ STATE = {
     "open_attempts": 0,
     "transfer_polls": 0,
     "transfer_path": "C:/saved/DSC09999.ARW",
+    # Advertised value sets. Shapes are taken from what a real body reports --
+    # a range is three numbers, a list is itself -- with invented contents.
+    "values": {
+        # FocusPositionSetting-shaped: a full 16-bit range, unit step.
+        0x020E: ("range", [0, 65535, 1]),
+        # A short enumerated list, as a mode property reports.
+        0x0109: ("enum", [1, 2, 3]),
+        # Present but of a shape the bridge does not take apart.
+        0x7FFE: ("raw", []),
+    },
     # Values a caller should see for the string properties above.
     "strings": {
         0x07B2: "SIM-CAM-1",
@@ -79,6 +89,7 @@ STATE = {
         0x0708: 0,       # MediaSLOT1_Status, ok
         0x0709: 1234,    # MediaSLOT1_RemainingNumber
         0x070A: 5678,    # MediaSLOT1_RemainingTime
+        0x020E: 30000,   # FocusPositionSetting, advertises a range
         0x7FFE: 42,      # a deliberately unnamed code
         # String-valued properties. The vendor reports zero through the numeric
         # accessor for these, which is what the property array carries; the
@@ -622,6 +633,18 @@ def handle_request(out, request_id: int, meta: bytes) -> bool:
         item = make_property(request.u32_arg, known[request.u32_arg])
         respond(out, request_id, items=[item],
                 item_size=_cabi.ctypes.sizeof(_cabi.PropertyStruct))
+        return True
+
+    if op == _ipc.OP_PROPERTY_VALUES:
+        entry = STATE["values"].get(request.u32_arg)
+        if entry is None:
+            respond(out, request_id, i32=0, count=0)  # advertises nothing
+            return True
+        shape, values = entry
+        kind = {"enum": 1, "range": 2, "raw": 3}[shape]
+        blob = b"".join(struct.pack("<q", v) for v in values)
+        respond(out, request_id, i32=kind, count=len(values), blob=blob,
+                item_size=8)
         return True
 
     if op == _ipc.OP_PROPERTY_STRING:

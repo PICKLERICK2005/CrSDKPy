@@ -92,6 +92,12 @@ TRANSFER_STOPPED = 5
 TRANSFER_CANCELED = 6
 TRANSFER_UNKNOWN = 7
 
+# Shape of a property's advertised value set, mirroring the ABI header.
+VALUES_NONE = 0
+VALUES_ENUM = 1
+VALUES_RANGE = 2
+VALUES_RAW = 3
+
 FOCUS_SRC_PROPERTY = 0
 FOCUS_SRC_WARNING = 1
 

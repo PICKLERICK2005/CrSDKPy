@@ -134,6 +134,14 @@ extern "C" {
 #define CRSDKPY_VTYPE_STRING    2
 #define CRSDKPY_VTYPE_INT_ARRAY 3
 
+/* Shape of a property's advertised value set, as the camera describes it. */
+#define CRSDKPY_VALUES_NONE  0  /* the property advertises nothing */
+#define CRSDKPY_VALUES_ENUM  1  /* a list of permitted values */
+#define CRSDKPY_VALUES_RANGE 2  /* exactly three: minimum, maximum, step */
+#define CRSDKPY_VALUES_RAW   3  /* present, but of a shape this bridge does
+                                 * not decode; left to the caller to ignore
+                                 * rather than guessed at */
+
 /* Compressed preview forms carried by the content index. Both are guaranteed
  * by the vendor to depict the still identified by (content_id, file_id). */
 #define CRSDKPY_PREVIEW_THUMBNAIL  1
@@ -286,6 +294,21 @@ CRSDKPY_API int32_t crsdkpy_last_error(char* buffer, uint32_t capacity);
  * Lives here because only the bridge links the vendor's error enumeration, and
  * deciding this from numeric literals elsewhere would duplicate it wrongly. */
 CRSDKPY_API int32_t crsdkpy_status_is_busy(int32_t status);
+
+/* Copies out a property's advertised value set, widened to int64.
+ *
+ * The camera describes what a property will accept, and discarding that leaves
+ * a caller guessing. Element width and signedness come from the vendor's own
+ * data type, so nothing here is inferred from the byte count.
+ *
+ * `out_kind` receives one of CRSDKPY_VALUES_*. A range is always three values
+ * in the order minimum, maximum, step. A set whose shape is not understood
+ * reports CRSDKPY_VALUES_RAW with a count of zero, so it is never presented as
+ * if it had been decoded. */
+CRSDKPY_API int32_t crsdkpy_property_values(uint64_t handle, uint32_t code,
+                                           int64_t* out, uint32_t capacity,
+                                           uint32_t* out_count,
+                                           int32_t* out_kind);
 
 /* Copies out a string-valued property as UTF-8.
  *

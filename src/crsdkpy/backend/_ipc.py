@@ -65,6 +65,7 @@ OP_LIVE_VIEW_INFO = 18
 OP_LIVE_VIEW_FRAME = 19
 OP_TAKE_TRANSFER_PATH = 20
 OP_PROPERTY_STRING = 21
+OP_PROPERTY_VALUES = 22
 OP_TEST_CRASH = 900
 
 CAT_NONE = 0
@@ -265,6 +266,13 @@ def from_bytes(structure_type, data: bytes):
     instance = structure_type()
     ctypes.memmove(ctypes.byref(instance), data, ctypes.sizeof(structure_type))
     return instance
+
+
+def unpack_int64_array(blob: bytes, count: int) -> list:
+    """Read *count* little-endian int64 values out of a response blob."""
+    width = 8
+    usable = min(count, len(blob) // width)
+    return list(struct.unpack_from(f"<{usable}q", blob)) if usable else []
 
 
 def unpack_array(structure_type, blob: bytes, count: int):

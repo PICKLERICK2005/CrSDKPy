@@ -1320,6 +1320,90 @@ int32_t crsdkpy_get_property(uint64_t handle, uint32_t code, crsdkpy_property* o
 }
 
 
+// Width in bytes of one element of a vendor data type, or 0 when the base type
+// is not one this bridge decodes.
+static uint32_t element_width(SDK::CrDataType type)
+{
+    switch (type & 0x0FFF) {
+    case SDK::CrDataType_UInt8:  return 1;
+    case SDK::CrDataType_UInt16: return 2;
+    case SDK::CrDataType_UInt32: return 4;
+    case SDK::CrDataType_UInt64: return 8;
+    default: return 0;
+    }
+}
+
+// Reads one element, sign-extending when the vendor says the type is signed.
+static int64_t read_element(const uint8_t* data, uint32_t width, bool is_signed)
+{
+    uint64_t raw = 0;
+    for (uint32_t i = 0; i < width; ++i) {
+        raw |= static_cast<uint64_t>(data[i]) << (8 * i);  // vendor is little-endian
+    }
+    if (!is_signed) return static_cast<int64_t>(raw);
+    switch (width) {
+    case 1: return static_cast<int8_t>(raw);
+    case 2: return static_cast<int16_t>(raw);
+    case 4: return static_cast<int32_t>(raw);
+    default: return static_cast<int64_t>(raw);
+    }
+}
+
+int32_t crsdkpy_property_values(uint64_t handle, uint32_t code, int64_t* out,
+                                uint32_t capacity, uint32_t* out_count,
+                                int32_t* out_kind)
+{
+    set_error("");
+    if (!out_count || !out_kind) return CRSDKPY_ERR_INVALID_ARG;
+    *out_count = 0;
+    *out_kind = CRSDKPY_VALUES_NONE;
+    if (capacity > 0 && !out) return CRSDKPY_ERR_INVALID_ARG;
+
+    std::lock_guard<std::mutex> lock(g_mutex);
+    auto session = resolve(handle);
+    if (!session) return CRSDKPY_ERR_INVALID_HANDLE;
+    if (session->state() != CRSDKPY_STATE_CONNECTED) return CRSDKPY_ERR_NOT_CONNECTED;
+
+    SDK::CrDeviceProperty* raw = nullptr;
+    CrInt32 count = 0;
+    CrInt32u wanted = code;
+    const auto error =
+        SDK::GetSelectDeviceProperties(session->handle(), 1, &wanted, &raw, &count);
+    PropertyList guard(session->handle(), raw);
+    if (error == SDK::CrError_Api_InvalidCalled || !raw || count < 1) {
+        set_error("the camera does not expose that property code");
+        return CRSDKPY_ERR_NOT_FOUND;
+    }
+    if (error != SDK::CrError_None) return static_cast<int32_t>(error);
+
+    const SDK::CrDataType type = raw[0].GetValueType();
+    const uint8_t* values = reinterpret_cast<const uint8_t*>(raw[0].GetValues());
+    const uint32_t bytes = raw[0].GetValueSize();
+    if (!values || bytes == 0) return CRSDKPY_OK;  // advertises nothing
+
+    const uint32_t width = element_width(type);
+    const bool ranged = (type & SDK::CrDataType_RangeBit) != 0;
+    const bool arrayed = (type & SDK::CrDataType_ArrayBit) != 0;
+    // A shape this bridge cannot take apart is reported as raw rather than
+    // sliced on a guess: a wrong value set is worse than none.
+    if (width == 0 || (!ranged && !arrayed) || bytes % width != 0 ||
+        (ranged && bytes / width != 3)) {
+        *out_kind = CRSDKPY_VALUES_RAW;
+        return CRSDKPY_OK;
+    }
+
+    const bool is_signed = (type & SDK::CrDataType_SignBit) != 0;
+    const uint32_t total = bytes / width;
+    *out_kind = ranged ? CRSDKPY_VALUES_RANGE : CRSDKPY_VALUES_ENUM;
+    *out_count = total;
+    if (capacity == 0) return CRSDKPY_OK;  // sizing call
+    if (total > capacity) return CRSDKPY_ERR_BUFFER_TOO_SMALL;
+    for (uint32_t i = 0; i < total; ++i) {
+        out[i] = read_element(values + (i * width), width, is_signed);
+    }
+    return CRSDKPY_OK;
+}
+
 int32_t crsdkpy_property_string(uint64_t handle, uint32_t code, char* out,
                                uint32_t capacity, uint32_t* out_length)
 {

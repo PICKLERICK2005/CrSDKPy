@@ -1,0 +1,55 @@
+{
+ "note": "Advertised value-set bytes as a real body reported them, kept to pin the wire format. Only the code, the vendor data type and the raw bytes are here; no property values, paths or identifiers.",
+ "source": "ILME-FX3A, firmware 2.02, CRSDK 2.02.00, Remote mode",
+ "properties": [
+  {
+   "code": "0x0109",
+   "name": "FocusMode",
+   "data_type": 8194,
+   "value_size": 10,
+   "values_hex": "02000400030006000100"
+  },
+  {
+   "code": "0x0104",
+   "name": "IsoSensitivity",
+   "data_type": 8195,
+   "value_size": 96,
+   "values_hex": "FFFFFF0050000000640000007D000000A0000000C8000000FA0000004001000090010000F40100008002000020030000E8030000E204000040060000D0070000C4090000800C0000A00F00008813000000190000401F00001027000000320000"
+  },
+  {
+   "code": "0x0119",
+   "name": "StillImageStoreDestination",
+   "data_type": 8194,
+   "value_size": 6,
+   "values_hex": "010003000200"
+  },
+  {
+   "code": "0x010E",
+   "name": "DriveMode",
+   "data_type": 8195,
+   "value_size": 56,
+   "values_hex": "0100000002000100010001000700010004000100030003000200030001000300010008000200080005000800060008000300080004000800"
+  },
+  {
+   "code": "0x01FF",
+   "name": "IntervalRec_NumberOfShots",
+   "data_type": 16386,
+   "value_size": 6,
+   "values_hex": "01000F270100"
+  },
+  {
+   "code": "0x020E",
+   "name": "FocusPositionSetting",
+   "data_type": 16386,
+   "value_size": 6,
+   "values_hex": "0000FFFF0100"
+  },
+  {
+   "code": "0x0766",
+   "name": "FocusPositionCurrentValue",
+   "data_type": 16386,
+   "value_size": 6,
+   "values_hex": "0000FFFF0100"
+  }
+ ]
+}

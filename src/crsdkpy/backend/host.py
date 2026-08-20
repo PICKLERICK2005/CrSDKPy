@@ -51,7 +51,7 @@ from ..errors import (
 )
 from ..events import Event
 from ..previews import LiveViewFrame, Preview
-from ..properties import Property, PropertyCode
+from ..properties import Property, PropertyCode, PropertyRange
 from . import _cabi, _ipc
 from .contract import Backend, BackendCameraInfo, ContentRef, LiveViewInfo
 from .native import (
@@ -703,7 +703,54 @@ class HostBackend(
             _ipc.OP_LIST_PROPERTIES, handle=handle, operation="list_properties"
         )
         raws = _ipc.unpack_array(_cabi.PropertyStruct, blob, response.count)
-        return [self._with_string(session_id, decode_property(raw)) for raw in raws]
+        return [self._describe(session_id, decode_property(raw)) for raw in raws]
+
+    def _describe(self, session_id: str, prop: Property) -> Property:
+        """Complete a property the array could not carry in full."""
+        return self._with_values(session_id, self._with_string(session_id, prop))
+
+    def _with_values(self, session_id: str, prop: Property) -> Property:
+        """Fill in what the camera says the property will accept.
+
+        The camera describes each property's permitted values or range, and
+        dropping that leaves a caller with no way to know what a property takes
+        short of trying values on real hardware. A range arrives as exactly
+        three numbers; a list arrives as itself.
+
+        A set the bridge could not take apart is recorded as present-but-raw
+        rather than being sliced on a guess, because a wrong value set is worse
+        than no value set.
+        """
+        if prop.allowed_values or prop.value_range is not None:
+            return prop
+        try:
+            response, blob = self._call(
+                _ipc.OP_PROPERTY_VALUES,
+                handle=self._handle(session_id, "property_values"),
+                u32=int(prop.code),
+                operation="property_values",
+            )
+        except CrSDKPyError:
+            return prop
+        kind = response.i32_result
+        if kind == _cabi.VALUES_RAW:
+            metadata = dict(prop.metadata)
+            metadata["values_undecoded"] = True
+            return replace(prop, metadata=metadata)
+        if kind == _cabi.VALUES_NONE or not response.count or not blob:
+            return prop
+        values = _ipc.unpack_int64_array(blob, response.count)
+        if kind == _cabi.VALUES_RANGE and len(values) == 3:
+            minimum, maximum, step = values
+            return replace(
+                prop,
+                value_range=PropertyRange(
+                    minimum=minimum, maximum=maximum, step=step or None
+                ),
+            )
+        if kind == _cabi.VALUES_ENUM:
+            return replace(prop, allowed_values=tuple(values))
+        return prop
 
     def _with_string(self, session_id: str, prop: Property) -> Property:
         """Fill in the value of a string-valued property.
@@ -746,7 +793,7 @@ class HostBackend(
             raise PropertyNotSupportedError(
                 f"camera does not expose property {code}", code=int(code)
             )
-        return self._with_string(session_id, decode_property(raws[0]))
+        return self._describe(session_id, decode_property(raws[0]))
 
     # -- test hooks --------------------------------------------------------
     def _provoke_host_exit(self) -> None:

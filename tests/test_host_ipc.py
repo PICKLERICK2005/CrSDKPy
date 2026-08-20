@@ -898,3 +898,66 @@ def test_a_snapshot_carries_strings_and_numbers_together() -> None:
         assert by_code[0x0104].value == 100
     finally:
         backend.shutdown()
+
+
+def test_a_range_property_reports_its_range() -> None:
+    """The camera says what a property accepts; discarding it strands callers.
+
+    A range arrives as exactly three numbers in the order minimum, maximum,
+    step. Nothing infers them from the byte count.
+    """
+    backend = make_backend()
+    try:
+        backend.start()
+        session = backend.open_session("cam-0", crsdkpy.SessionMode.REMOTE)
+        prop = backend.get_property(session, crsdkpy.PropertyCode(0x020E))
+        assert prop.value_range is not None
+        assert prop.value_range.minimum == 0
+        assert prop.value_range.maximum == 65535
+        assert prop.value_range.step == 1
+        assert prop.accepts(30000)
+        assert not prop.accepts(70000)
+    finally:
+        backend.shutdown()
+
+
+def test_an_enumerated_property_reports_its_permitted_values() -> None:
+    backend = make_backend()
+    try:
+        backend.start()
+        session = backend.open_session("cam-0", crsdkpy.SessionMode.REMOTE)
+        prop = backend.get_property(session, crsdkpy.PropertyCode(0x0109))
+        assert prop.allowed_values == (1, 2, 3)
+        assert prop.accepts(2)
+        assert not prop.accepts(9)
+    finally:
+        backend.shutdown()
+
+
+def test_an_undecodable_value_set_is_flagged_not_guessed() -> None:
+    """A wrong value set is worse than none, so it is never sliced on a guess."""
+    backend = make_backend()
+    try:
+        backend.start()
+        session = backend.open_session("cam-0", crsdkpy.SessionMode.REMOTE)
+        prop = backend.get_property(session, crsdkpy.PropertyCode(0x7FFE))
+        assert prop.allowed_values == ()
+        assert prop.value_range is None
+        assert prop.metadata.get("values_undecoded") is True
+        # With no constraints reported, nothing is claimed to be invalid.
+        assert prop.accepts(12345)
+    finally:
+        backend.shutdown()
+
+
+def test_a_property_advertising_nothing_stays_unconstrained() -> None:
+    backend = make_backend()
+    try:
+        backend.start()
+        session = backend.open_session("cam-0", crsdkpy.SessionMode.REMOTE)
+        prop = backend.get_property(session, crsdkpy.PropertyCode(0x0104))
+        assert prop.allowed_values == ()
+        assert prop.value_range is None
+        assert "values_undecoded" not in prop.metadata
+    finally:
+        backend.shutdown()

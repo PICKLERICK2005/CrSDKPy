@@ -411,6 +411,38 @@ void dispatch(const crsdkpy_ipc_request& request,
         return;
     }
 
+    case CRSDKPY_OP_PROPERTY_VALUES: {
+        const uint32_t code = static_cast<uint32_t>(request.i32_arg);
+        uint32_t count = 0;
+        int32_t kind = 0;
+        int32_t status = crsdkpy_property_values(request.handle, code, nullptr,
+                                                 0, &count, &kind);
+        if (status != CRSDKPY_OK) {
+            fill(response, status, categorise(status), "");
+            attach_bridge_error(response);
+            return;
+        }
+        std::vector<int64_t> values(count ? count : 1, 0);
+        if (count) {
+            status = crsdkpy_property_values(request.handle, code, values.data(),
+                                             count, &count, &kind);
+            if (status != CRSDKPY_OK) {
+                fill(response, status, categorise(status), "");
+                attach_bridge_error(response);
+                return;
+            }
+        }
+        fill(response, CRSDKPY_OK, CRSDKPY_CAT_NONE, "");
+        response.i32_result = kind;
+        response.count = count;
+        response.item_size = sizeof(int64_t);
+        if (count) {
+            const char* begin = reinterpret_cast<const char*>(values.data());
+            blob_out.assign(begin, begin + (count * sizeof(int64_t)));
+        }
+        return;
+    }
+
     case CRSDKPY_OP_PROPERTY_STRING: {
         const uint32_t code = static_cast<uint32_t>(request.i32_arg);
         uint32_t length = 0;

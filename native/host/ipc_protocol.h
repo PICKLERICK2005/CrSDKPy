@@ -82,6 +82,8 @@ extern "C" {
 /* Reads a string-valued property as UTF-8. Empty success when the property
  * carries no string. */
 #define CRSDKPY_OP_PROPERTY_STRING    21
+/* Reads a property's advertised value set. i32_result carries the shape. */
+#define CRSDKPY_OP_PROPERTY_VALUES    22
 /* Test-only: makes the host terminate abruptly so process-death handling can
  * be exercised without provoking a real native fault. */
 #define CRSDKPY_OP_TEST_CRASH      900
