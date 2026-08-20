@@ -49,7 +49,7 @@ def test_non_jpeg_bytes_are_rejected() -> None:
 
 
 def test_dimensions_come_from_the_frame_header() -> None:
-    from tests.fake_host import synth_jpeg
+    from fake_host import synth_jpeg
 
     data = synth_jpeg(1, 4096, 1616, 1080)
     assert is_jpeg(data)
@@ -243,7 +243,7 @@ def test_previews_are_marked_exact_still_associated(kind) -> None:
 
 def test_preview_bytes_cross_the_pipe_unchanged() -> None:
     """The blob carries the image as itself; nothing is encoded into text."""
-    from tests.fake_host import PREVIEW_SHAPE, synth_jpeg
+    from fake_host import PREVIEW_SHAPE, synth_jpeg
     from crsdkpy.backend import _cabi
 
     with crsdkpy.SDK(backend=make_backend()) as sdk:
