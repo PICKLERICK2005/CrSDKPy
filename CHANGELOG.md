@@ -4,9 +4,24 @@ Dates are the day the change was validated, not the day it was released.
 
 ## 0.1.0b2 — 2026-08-20
 
-A hardware session against the reference ILME-FX3A. Every fix below was
-reproduced on the camera before it was written, and the record of what the body
-does is in `docs/FX3_CHARACTERIZATION.md`.
+**A beta, not a release candidate and not stable.** It changes a connection
+default and adds API surface, and one supported body is not broad coverage.
+
+Two groups of changes, and they did not get the same scrutiny:
+
+*Validated on the reference ILME-FX3A.* The save-path and postview fix, the busy
+classification, the connection-event fix, the destination handling and the
+characterization tooling were each reproduced on the camera before they were
+written. The record of what the body does is in
+`docs/FX3_CHARACTERIZATION.md`.
+
+*Not yet run against a camera.* The transfer result overload, string-valued
+properties, advertised value sets and the reconnection policy were implemented
+**after the final physical-camera session had ended**, prompted by auditing the
+implementation against the vendor's own API reference and samples. They are
+covered by the automated suite, the native build and self-test, and the
+fake-host protocol tests, and they follow the documented contracts — but no part
+of them has been exercised on hardware. Treat them accordingly.
 
 ### Fixed
 
@@ -98,14 +113,21 @@ does is in `docs/FX3_CHARACTERIZATION.md`.
 
 ### Changed (reconnection)
 
-- Opening a session no longer turns on the vendor's reconnection monitor by
-  default. `Camera.open()` takes a `reconnect` policy, and the default,
-  `ReconnectPolicy.BOUNDED`, leaves the monitor off so the call either connects
-  or fails promptly. Previously it was always on and no caller could see or
-  change that, which is what allowed a single open to block for the monitor's
-  documented five minutes.
-- `ReconnectPolicy.VENDOR` keeps the previous behaviour for callers who want a
-  session to survive a cable event unaided, and accepts that worst case.
+**This changes a default.** Ordinary session opening -- `Camera.open()` and
+`Backend.open_session()` -- now connects with the vendor's reconnection monitor
+**off**, passing `CrReconnecting_OFF`. Previously it always passed
+`CrReconnecting_ON`, and no caller could see or change that.
+
+- `ReconnectPolicy.BOUNDED` is the new default: the monitor is off, so opening a
+  session either connects or fails promptly.
+- `ReconnectPolicy.VENDOR` opts into the vendor's documented reconnect monitor
+  by passing `CrReconnecting_ON`. That monitor retries a lost transport for
+  **approximately five minutes** before reporting the session disconnected, so
+  in the failure states where it engages a single call can block for about that
+  long. Nothing above the vendor can shorten it. Choose this for a long-lived
+  session that should survive a cable event unaided.
+- Callers who relied on the previous behaviour get it back by passing
+  `ReconnectPolicy.VENDOR` explicitly.
 - The connection-callback retry now applies only under the bounded policy. Under
   the vendor policy a failed attempt has already spent the monitor's timeout, so
   a second attempt would spend it again without changing the outcome.
