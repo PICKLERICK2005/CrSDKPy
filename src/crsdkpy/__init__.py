@@ -44,6 +44,7 @@ from .enums import (
     PreviewKind,
     PropertyAccess,
     PropertyValueType,
+    ReconnectPolicy,
     RecordingState,
     SessionMode,
     StillDestination,
@@ -113,6 +114,7 @@ __all__ = [
     "PropertySnapshot",
     "PropertyAccess",
     "PropertyValueType",
+    "ReconnectPolicy",
     "register_property_name",
     # events
     "Event",

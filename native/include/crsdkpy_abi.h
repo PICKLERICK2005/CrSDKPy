@@ -358,9 +358,29 @@ CRSDKPY_API int32_t crsdkpy_camera_at(uint32_t index, crsdkpy_camera_info* out);
 
 /* Open a session. device_key comes from crsdkpy_camera_at. The mode cannot be
  * changed afterwards; reopen to switch. */
+/* Whether the vendor should monitor and re-establish a dropped link itself.
+ *
+ * Vendor reconnection is a background monitor: on losing the transport it moves
+ * the session to a reconnecting state and keeps trying for five minutes before
+ * declaring it disconnected. That is useful for a long-lived session and wrong
+ * for an open, where it means a single call can block for those five minutes.
+ *
+ * BOUNDED leaves it off, so a connect either works or fails promptly.
+ * VENDOR turns it on and accepts the five-minute worst case in exchange for
+ * surviving a cable event without the caller doing anything. */
+#define CRSDKPY_RECONNECT_BOUNDED 0
+#define CRSDKPY_RECONNECT_VENDOR  1
+
 CRSDKPY_API int32_t crsdkpy_open_session(const char* device_key,
                                          int32_t mode,
                                          uint64_t* out_handle);
+
+/* As above, choosing the reconnection policy explicitly. The older entry point
+ * remains and keeps its behaviour; this one exists so the choice is visible at
+ * the call site rather than compiled in. */
+CRSDKPY_API int32_t crsdkpy_open_session_ex(const char* device_key,
+                                           int32_t mode, int32_t reconnect,
+                                           uint64_t* out_handle);
 
 /* Close a session. Safe to call repeatedly and safe on a stale handle. */
 CRSDKPY_API int32_t crsdkpy_close_session(uint64_t handle);

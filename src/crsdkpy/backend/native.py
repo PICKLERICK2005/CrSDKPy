@@ -38,6 +38,7 @@ from ..enums import (
     PreviewKind,
     PropertyAccess,
     PropertyValueType,
+    ReconnectPolicy,
     RecordingState,
     SessionMode,
     StillDestination,
@@ -986,6 +987,7 @@ class NativeBackend(
         device_key: str,
         mode: SessionMode,
         destination: Optional[StillDestination] = None,
+        reconnect: ReconnectPolicy = ReconnectPolicy.BOUNDED,
     ) -> str:
         self._require_started("open_session")
         abi_mode = _MODE_TO_ABI.get(mode)

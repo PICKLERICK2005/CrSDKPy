@@ -25,6 +25,7 @@ from ..enums import (
     ConnectionState,
     FocusState,
     PreviewKind,
+    ReconnectPolicy,
     RecordingState,
     SessionMode,
     StillDestination,
@@ -261,6 +262,7 @@ class SimulatedBackend(Backend):
         device_key: str,
         mode: SessionMode,
         destination: Optional[StillDestination] = None,
+        reconnect: ReconnectPolicy = ReconnectPolicy.BOUNDED,
     ) -> str:
         profile = self._profile_for(device_key)
         if mode not in profile.modes:

@@ -54,6 +54,7 @@ STATE = {
     "sessions": {},        # handle -> {"generation": int, "open": bool}
     "open_attempts": 0,
     "transfer_polls": 0,
+    "open_reconnect": [],   # reconnect policy seen per open request
     "transfer_path": "C:/saved/DSC09999.ARW",
     # Advertised value sets. Shapes are taken from what a real body reports --
     # a range is three numbers, a list is itself -- with invented contents.
@@ -369,11 +370,13 @@ def handle_request(out, request_id: int, meta: bytes) -> bool:
             BEHAVIOUR == "connect_timeout_once" and not STATE["open_attempts"]
         ):
             STATE["open_attempts"] += 1
+            STATE["open_reconnect"].append(request.i32_arg2)
             respond(out, request_id, status=-9,
                     category=_ipc.CAT_CONNECT_TIMEOUT,
                     message=b"timed out waiting for the connection callback")
             return True
         STATE["open_attempts"] += 1
+        STATE["open_reconnect"].append(request.i32_arg2)
         STATE["generation"] += 1
         slot = STATE["next_slot"]
         STATE["next_slot"] += 1
@@ -633,6 +636,13 @@ def handle_request(out, request_id: int, meta: bytes) -> bool:
         item = make_property(request.u32_arg, known[request.u32_arg])
         respond(out, request_id, items=[item],
                 item_size=_cabi.ctypes.sizeof(_cabi.PropertyStruct))
+        return True
+
+    if op == _ipc.OP_GET_COUNTERS:
+        # Test-only: how the host was actually called.
+        payload = ",".join(str(v) for v in STATE["open_reconnect"]).encode()
+        respond(out, request_id, message=payload,
+                count=len(STATE["open_reconnect"]))
         return True
 
     if op == _ipc.OP_PROPERTY_VALUES:

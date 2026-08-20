@@ -34,6 +34,7 @@ from ..enums import (
     ConnectionState,
     PreviewKind,
     PropertyValueType,
+    ReconnectPolicy,
     SessionMode,
     StillDestination,
 )
@@ -109,6 +110,12 @@ SAVE_DIR_ENV_VAR = "CRSDKPY_SAVE_DIR"
 #: a second attempt comes from the first one's disconnect having cleared the
 #: camera's stale session, and a third has nothing new to clear.
 _CONNECT_RETRIES = 1
+
+#: Reconnection policy as the ABI names it.
+_RECONNECT_TO_ABI = {
+    ReconnectPolicy.BOUNDED: 0,
+    ReconnectPolicy.VENDOR: 1,
+}
 
 
 def resolve_save_directory(explicit: Optional[str] = None) -> str:
@@ -584,7 +591,9 @@ class HostBackend(
         return [decode_camera_info(info) for info in infos]
 
     # -- sessions ----------------------------------------------------------
-    def _open_with_retry(self, abi_mode: int, device_key: str):
+    def _open_with_retry(
+        self, abi_mode: int, device_key: str, reconnect: ReconnectPolicy
+    ):
         """Open a session, retrying only a connection-callback timeout.
 
         Hardware behaviour this exists for: when a previous consumer went away
@@ -601,12 +610,18 @@ class HostBackend(
         vendor rejection of Connect is reported as-is, because nothing was
         cleaned up and repeating it would just spend the deadline twice.
         """
-        attempts = _CONNECT_RETRIES + 1
+        # Only the bounded policy retries. With the vendor's reconnection
+        # monitor running, a failed attempt has already spent up to five
+        # minutes inside it, and a second would spend five more without
+        # changing anything: the monitor, not a stale session, is what the time
+        # went on.
+        attempts = 1 if reconnect is ReconnectPolicy.VENDOR else _CONNECT_RETRIES + 1
         for attempt in range(1, attempts + 1):
             try:
                 response, _ = self._call(
                     _ipc.OP_OPEN_SESSION,
                     i32=abi_mode,
+                    i32_2=_RECONNECT_TO_ABI[reconnect],
                     text=device_key,
                     operation="open_session",
                 )
@@ -623,13 +638,14 @@ class HostBackend(
         device_key: str,
         mode: SessionMode,
         destination: Optional[StillDestination] = None,
+        reconnect: ReconnectPolicy = ReconnectPolicy.BOUNDED,
     ) -> str:
         abi_mode = {
             SessionMode.REMOTE: 0,
             SessionMode.CONTENTS_TRANSFER: 1,
             SessionMode.REMOTE_TRANSFER: 2,
         }[mode]
-        response = self._open_with_retry(abi_mode, device_key)
+        response = self._open_with_retry(abi_mode, device_key, reconnect)
         self._session_counter += 1
         session_id = f"host-session-{self._session_counter}"
         self._handles[session_id] = response.handle

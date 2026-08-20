@@ -222,8 +222,10 @@ void dispatch(const crsdkpy_ipc_request& request,
 
     case CRSDKPY_OP_OPEN_SESSION: {
         uint64_t handle = 0;
-        const int32_t status =
-            crsdkpy_open_session(request.text, request.i32_arg, &handle);
+        // i32_arg2 carries the reconnection policy; a caller that predates it
+        // sends zero, which is the bounded policy.
+        const int32_t status = crsdkpy_open_session_ex(
+            request.text, request.i32_arg, request.i32_arg2, &handle);
         fill(response, status, categorise(status), "");
         if (status != CRSDKPY_OK) {
             attach_bridge_error(response);

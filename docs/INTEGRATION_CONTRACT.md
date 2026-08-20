@@ -112,6 +112,15 @@ a backend describing something this release has never heard of stays usable.
   tear the session down over it. The vendor code is on `backend_code`; the first
   content listing after opening a RemoteTransfer session is the case that
   actually occurs, failing in about a millisecond with `0x8D05`.
+- **You choose who recovers a dropped link.** `Camera.open()` takes a
+  `reconnect` policy and defaults to `ReconnectPolicy.BOUNDED`, which leaves the
+  vendor's reconnection monitor off so opening a session either succeeds or
+  fails promptly. That monitor keeps trying for five minutes before giving up,
+  and with it enabled those five minutes become the worst case for the open
+  call itself, which nothing above the vendor can shorten. Pass
+  `ReconnectPolicy.VENDOR` for a long-lived session that should survive a cable
+  event unaided, and expect that worst case in exchange. The vendor documents
+  the monitor as active in Remote and RemoteTransfer modes only.
 - **A reconnect does not require a disconnect.** The state machine must accept
   `connected -> reconnecting -> connected` with no disconnect notification in
   between, because that is what the reference body does.

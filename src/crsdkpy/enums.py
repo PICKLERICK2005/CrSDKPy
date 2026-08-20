@@ -16,6 +16,7 @@ __all__ = [
     "PreviewKind",
     "PropertyAccess",
     "PropertyValueType",
+    "ReconnectPolicy",
     "RecordingState",
     "SessionMode",
     "StillDestination",
@@ -139,6 +140,25 @@ class RecordingState(Enum):
     RECORDING = "recording"
     STOPPING = "stopping"
     FAILED = "failed"
+
+
+class ReconnectPolicy(Enum):
+    """Who is responsible for recovering a dropped link.
+
+    The vendor can monitor the transport and re-establish it on its own. That
+    monitor keeps trying for five minutes before giving up, which is what a
+    long-lived session wants and the opposite of what opening one wants: the
+    same five minutes then becomes the worst case for a single open, and nothing
+    above the vendor can shorten it.
+
+    ``BOUNDED`` leaves the monitor off, so opening a session either succeeds or
+    fails promptly and a dropped link is reported rather than papered over.
+    ``VENDOR`` turns it on for callers who would rather a cable event healed
+    itself and can afford the wait.
+    """
+
+    BOUNDED = "bounded"
+    VENDOR = "vendor"
 
 
 class TransferOutcome(Enum):

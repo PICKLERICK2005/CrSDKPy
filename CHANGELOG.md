@@ -96,14 +96,27 @@ does is in `docs/FX3_CHARACTERIZATION.md`.
   documents automatic transfer to the PC; the size is governed by
   `StillImageTransSize`, which was set to SmallSize on the tested body.
 
+### Changed (reconnection)
+
+- Opening a session no longer turns on the vendor's reconnection monitor by
+  default. `Camera.open()` takes a `reconnect` policy, and the default,
+  `ReconnectPolicy.BOUNDED`, leaves the monitor off so the call either connects
+  or fails promptly. Previously it was always on and no caller could see or
+  change that, which is what allowed a single open to block for the monitor's
+  documented five minutes.
+- `ReconnectPolicy.VENDOR` keeps the previous behaviour for callers who want a
+  session to survive a cable event unaided, and accepts that worst case.
+- The connection-callback retry now applies only under the bounded policy. Under
+  the vendor policy a failed attempt has already spent the monitor's timeout, so
+  a second attempt would spend it again without changing the outcome.
+
 ### Known gaps this audit exposed
 
 - String-valued properties are read through the numeric accessor only and
   therefore report `0`, including model name, serial, firmware and lens identity.
 - Advertised value sets and ranges are never populated, though most properties
   on the tested body carry one.
-- Only one of the two `OnNotifyRemoteTransferResult` overloads is implemented, so
-  the file-writing transfer variants report no progress or completion at all.
+All three are now fixed; the entries above describe what was wrong.
 
 ### Tooling
 

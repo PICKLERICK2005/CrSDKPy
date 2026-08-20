@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Optional, Union
 
 from .capabilities import CameraCapabilities
-from .enums import SessionMode, StillDestination
+from .enums import ReconnectPolicy, SessionMode, StillDestination
 from .errors import UnsupportedOperationError
 from .session import Session
 
@@ -100,12 +100,20 @@ class Camera:
         mode: Union[SessionMode, str] = SessionMode.REMOTE,
         *,
         destination: Optional[StillDestination] = None,
+        reconnect: ReconnectPolicy = ReconnectPolicy.BOUNDED,
     ) -> Session:
         """Open a session in *mode*.
 
         ``mode`` accepts a :class:`~crsdkpy.enums.SessionMode` or its string
         value. The mode is explicit because it decides which operations exist
         and cannot be changed once the session is open.
+
+        ``reconnect`` decides who recovers a dropped link. The default leaves
+        the vendor's reconnection monitor off, so this call either connects or
+        fails promptly; the monitor keeps trying for five minutes, which would
+        otherwise become the worst case for opening a session. Pass
+        :attr:`~crsdkpy.enums.ReconnectPolicy.VENDOR` for a long-lived session
+        that should survive a cable event on its own.
         """
         mode = _coerce_mode(mode)
         if not self.supports_mode(mode):
@@ -130,7 +138,7 @@ class Camera:
             )
 
         session_id = self._backend.open_session(
-            self._info.device_key, mode, destination
+            self._info.device_key, mode, destination, reconnect
         )
         session = Session(self, self._backend, session_id, mode)
         self._sessions.append(session)

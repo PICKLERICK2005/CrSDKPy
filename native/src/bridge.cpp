@@ -382,14 +382,21 @@ public:
     Session(const Session&) = delete;
     Session& operator=(const Session&) = delete;
 
-    int32_t open(SDK::ICrCameraObjectInfo* info, const std::string& save_directory)
+    int32_t open(SDK::ICrCameraObjectInfo* info, const std::string& save_directory,
+                int32_t reconnect_policy)
     {
         state_.store(CRSDKPY_STATE_CONNECTING);
         push(CRSDKPY_EVENT_CONNECTION, 0, CRSDKPY_STATE_CONNECTING, 0, 0, 0);
 
+        // Vendor reconnection is opt-in. Left on, its five-minute monitor
+        // becomes the worst case for this call rather than for a link that
+        // drops later, and nothing here can shorten it.
+        const auto reconnect = reconnect_policy == CRSDKPY_RECONNECT_VENDOR
+                                   ? SDK::CrReconnecting_ON
+                                   : SDK::CrReconnecting_OFF;
         const auto error = SDK::Connect(
             info, &callback_, &handle_,
-            static_cast<SDK::CrSdkControlMode>(mode_), SDK::CrReconnecting_ON);
+            static_cast<SDK::CrSdkControlMode>(mode_), reconnect);
         if (error != SDK::CrError_None) {
             set_error("Connect failed");
             state_.store(CRSDKPY_STATE_CLOSED);
@@ -1132,6 +1139,13 @@ int32_t crsdkpy_status_is_busy(int32_t status)
 int32_t crsdkpy_open_session(const char* device_key, int32_t mode,
                              uint64_t* out_handle)
 {
+    return crsdkpy_open_session_ex(device_key, mode,
+                                   CRSDKPY_RECONNECT_BOUNDED, out_handle);
+}
+
+int32_t crsdkpy_open_session_ex(const char* device_key, int32_t mode,
+                                int32_t reconnect, uint64_t* out_handle)
+{
     set_error("");  // never inherit a previous failure's text
     if (!device_key || !out_handle) return CRSDKPY_ERR_INVALID_ARG;
     std::lock_guard<std::mutex> lock(g_mutex);
@@ -1165,7 +1179,8 @@ int32_t crsdkpy_open_session(const char* device_key, int32_t mode,
     // to retry belongs to the caller rather than here: this function holds the
     // global lock, and spending two full connect deadlines under it would
     // block every other call into the bridge.
-    const int32_t status = session->open(raw_info, save_directory);
+    const int32_t status =
+        session->open(raw_info, save_directory, reconnect);
     if (status != CRSDKPY_OK) return status;
 
     // Reuse a free slot, bumping its generation so old handles stay invalid.

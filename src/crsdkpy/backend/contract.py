@@ -32,6 +32,7 @@ from ..enums import (
     ConnectionState,
     FocusState,
     PreviewKind,
+    ReconnectPolicy,
     RecordingState,
     SessionMode,
     StillDestination,
@@ -160,7 +161,14 @@ class Backend:
         device_key: str,
         mode: SessionMode,
         destination: Optional[StillDestination] = None,
+        reconnect: ReconnectPolicy = ReconnectPolicy.BOUNDED,
     ) -> str:  # pragma: no cover - interface
+        """Open a session and return its opaque id.
+
+        ``reconnect`` decides whether the vendor watches the transport and
+        re-establishes it itself. It defaults to bounded, because the vendor's
+        monitor is what makes a single open able to block for five minutes.
+        """
         raise NotImplementedError
 
     def close_session(self, session_id: str) -> None:  # pragma: no cover
