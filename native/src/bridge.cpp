@@ -1050,26 +1050,13 @@ int32_t crsdkpy_open_session(const char* device_key, int32_t mode,
         g_cameras.get()->GetCameraObjectInfo(index));
     const std::string save_directory =
         g_save_dir.empty() ? g_adapter_dir : g_save_dir;
-    int32_t status = session->open(raw_info, save_directory);
-
-    // One retry, and only for the connection-callback timeout.
-    //
-    // Measured on hardware: when a previous consumer went away without
-    // disconnecting, the camera still holds that transport session. The vendor
-    // then accepts Connect and never delivers the connection callback, so the
-    // first attempt spends its whole deadline waiting. What clears the stale
-    // session is the failed attempt's own Disconnect, which means a second
-    // attempt is not a hopeful repeat of the first: it runs against a camera
-    // the first attempt just cleaned up. First attempt times out at 15 s, the
-    // retry connects in ~0.6 s.
-    //
-    // Deliberately narrow. A vendor rejection of Connect returns a positive
-    // vendor code and is not retried, because nothing was cleaned up and
-    // repeating it would only double the delay.
-    if (status == CRSDKPY_ERR_CONNECT_FAILED) {
-        session = std::make_shared<Session>(wanted, mode);
-        status = session->open(raw_info, save_directory);
-    }
+    // A failed open has already disconnected and released the device by the
+    // time this returns, so nothing is left for the caller to clean up. That
+    // is what makes retrying the callback timeout worthwhile, and the decision
+    // to retry belongs to the caller rather than here: this function holds the
+    // global lock, and spending two full connect deadlines under it would
+    // block every other call into the bridge.
+    const int32_t status = session->open(raw_info, save_directory);
     if (status != CRSDKPY_OK) return status;
 
     // Reuse a free slot, bumping its generation so old handles stay invalid.

@@ -694,3 +694,67 @@ def test_busy_is_not_reported_as_a_broken_connection() -> None:
     # caller's business and it may want to know exactly what happened.
     assert error.backend_code == 0x8D05
     assert error.operation == "list_content"
+
+
+def test_a_connection_callback_timeout_is_retried_once() -> None:
+    """The one retry that hardware justifies, exercised without a camera.
+
+    When a previous consumer went away without disconnecting, the camera still
+    holds that transport session: the vendor accepts Connect and never delivers
+    the connection callback. The failed attempt's own disconnect is what clears
+    it, so the next attempt runs against a camera the first one just cleaned up
+    and succeeds. Measured on hardware as 15.03 s then 0.59 s.
+    """
+    backend = make_backend("connect_timeout_once")
+    try:
+        backend.start()
+        session = backend.open_session("cam-0", crsdkpy.SessionMode.REMOTE)
+        assert session  # the retry got there
+    finally:
+        backend.shutdown()
+
+
+def test_a_persistent_connect_failure_is_not_retried_forever() -> None:
+    """One retry, not a loop. A camera that never connects has to say so."""
+    backend = make_backend("connect_timeout_always")
+    try:
+        backend.start()
+        with pytest.raises(crsdkpy.CameraConnectionError) as excinfo:
+            backend.open_session("cam-0", crsdkpy.SessionMode.REMOTE)
+        assert "connection callback" in str(excinfo.value)
+    finally:
+        backend.shutdown()
+
+
+def test_the_save_directory_is_always_resolved_to_something() -> None:
+    """A host-bound still needs a configured path, so there is no "unset".
+
+    Without one the camera announces no postview at all and leaves the still
+    destination unsettable for the rest of the session, so this returning
+    nothing would be a silent loss of a whole feature.
+    """
+    from crsdkpy.backend.host import resolve_save_directory
+
+    resolved = resolve_save_directory()
+    assert os.path.isabs(resolved)
+    assert os.path.isdir(resolved)
+
+
+def test_an_explicit_save_directory_wins(tmp_path) -> None:
+    from crsdkpy.backend.host import resolve_save_directory
+
+    wanted = tmp_path / "somewhere-else"
+    assert resolve_save_directory(str(wanted)) == str(wanted)
+    assert wanted.is_dir()  # created rather than merely reported
+
+
+def test_the_save_directory_is_not_the_vendor_runtime_directory() -> None:
+    """The default must not be the directory the host runs in.
+
+    That is the vendor runtime's own directory. The library does not own it and
+    it need not be writable, so it is the wrong place to let a camera write.
+    """
+    from crsdkpy.backend.host import resolve_save_directory
+
+    backend = make_backend()
+    assert resolve_save_directory() != backend._adapter_dir

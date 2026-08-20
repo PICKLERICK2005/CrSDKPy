@@ -97,6 +97,11 @@ extern "C" {
  * definition: the same call is expected to succeed shortly afterwards, so it
  * must not be reported as a broken connection. */
 #define CRSDKPY_CAT_BUSY         11
+/* Connect was accepted and the connection callback never arrived. Distinct from
+ * a vendor rejection because the failed attempt's own disconnect is what clears
+ * the camera's stale session, so one more attempt is materially different from
+ * the first rather than a hopeful repeat. */
+#define CRSDKPY_CAT_CONNECT_TIMEOUT 12
 
 #pragma pack(push, 1)
 

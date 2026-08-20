@@ -22,6 +22,7 @@ import ctypes
 import os
 import subprocess
 import sys
+import tempfile
 import threading
 from collections.abc import Sequence
 from typing import Any, Optional
@@ -99,6 +100,44 @@ class HostState:
 #: Environment variable naming an explicit host executable.
 HOST_ENV_VAR = "CRSDKPY_HOST"
 
+#: Environment variable naming the directory for host-bound stills.
+SAVE_DIR_ENV_VAR = "CRSDKPY_SAVE_DIR"
+
+#: Retries of a connection-callback timeout. Exactly one, because the value of
+#: a second attempt comes from the first one's disconnect having cleared the
+#: camera's stale session, and a third has nothing new to clear.
+_CONNECT_RETRIES = 1
+
+
+def resolve_save_directory(explicit: Optional[str] = None) -> str:
+    """Choose the directory the camera may write a host-bound still into.
+
+    The vendor requires one to be configured before a capture whose destination
+    includes the host: without it the camera announces no postview and leaves
+    the destination property unsettable for the rest of the session. So this
+    always returns a path rather than sometimes returning nothing.
+
+    The default is deliberately **not** the directory the host runs in. That is
+    the vendor runtime's own directory, which the library does not own and which
+    need not be writable. A temporary directory is somewhere the library may
+    always create, and it is honest about the current state of affairs: with the
+    destinations CrSDKPy supports today the camera writes nothing there, and the
+    path exists to satisfy the precondition. When original-file transfer lands
+    and files really do arrive, the destination for them becomes a caller's
+    decision and belongs in the public API, not in this default.
+    """
+    chosen = explicit or os.environ.get(SAVE_DIR_ENV_VAR) or os.path.join(
+        tempfile.gettempdir(), "crsdkpy-host"
+    )
+    chosen = os.path.abspath(chosen)
+    try:
+        os.makedirs(chosen, exist_ok=True)
+    except OSError:
+        # Not fatal: a card-only session never needs it, and the host reports a
+        # warning event if the camera refuses the path.
+        pass
+    return chosen
+
 
 def _host_filename() -> str:
     return "crsdkpy_host.exe" if sys.platform == "win32" else "crsdkpy_host"
@@ -150,6 +189,7 @@ class HostBackend(
         adapter_dir: Optional[str] = None,
         start_timeout_sec: float = 20.0,
         command: Optional[Sequence[str]] = None,
+        save_directory: Optional[str] = None,
     ) -> None:
         # `command` launches an arbitrary argv instead of a located binary. It
         # exists so the pure-Python fake host can be driven through exactly the
@@ -179,6 +219,7 @@ class HostBackend(
         self._clock = clock or RealClock()
         self._enumerate_timeout = enumerate_timeout_sec
         self._start_timeout = start_timeout_sec
+        self._save_directory = resolve_save_directory(save_directory)
 
         self._process: Optional[subprocess.Popen] = None
         self._state = HostState.NOT_STARTED
@@ -217,6 +258,11 @@ class HostBackend(
                 return
             self._state = HostState.STARTING
             try:
+                # The save directory is passed explicitly rather than left to
+                # inheritance, so the resolved policy is what the host sees
+                # even when the parent's environment says something else.
+                child_env = dict(os.environ)
+                child_env[SAVE_DIR_ENV_VAR] = self._save_directory
                 self._process = subprocess.Popen(
                     self._command or [self._host_path],
                     stdin=subprocess.PIPE,
@@ -224,6 +270,7 @@ class HostBackend(
                     stderr=subprocess.DEVNULL,
                     cwd=self._adapter_dir,
                     close_fds=True,
+                    env=child_env,
                 )
             except OSError as exc:
                 self._state = HostState.CRASHED
@@ -495,6 +542,15 @@ class HostBackend(
             return CameraConnectionError(
                 "the session is not connected", operation=operation
             )
+        if category == _ipc.CAT_CONNECT_TIMEOUT:
+            # Still a connection error to the caller. The marker exists so the
+            # one place that retries can recognise it without matching on the
+            # message text.
+            error = CameraConnectionError(
+                message, operation=operation, backend_code=code
+            )
+            error._connect_callback_timeout = True
+            return error
         if category == _ipc.CAT_TIMEOUT:
             return OperationTimeoutError(message, operation=operation)
         if category == _ipc.CAT_NOT_FOUND:
@@ -526,6 +582,40 @@ class HostBackend(
         return [decode_camera_info(info) for info in infos]
 
     # -- sessions ----------------------------------------------------------
+    def _open_with_retry(self, abi_mode: int, device_key: str):
+        """Open a session, retrying only a connection-callback timeout.
+
+        Hardware behaviour this exists for: when a previous consumer went away
+        without disconnecting, the camera still holds that transport session.
+        The vendor accepts Connect and never delivers the connection callback,
+        so the attempt spends its whole deadline waiting. What clears the stale
+        session is that failed attempt's own disconnect, which makes a second
+        attempt materially different from the first rather than a hopeful
+        repeat: it runs against a camera the first attempt just cleaned up.
+        Measured on an ILME-FX3A, the first attempt failed at 15.03 s and the
+        next succeeded in 0.59 s.
+
+        Deliberately narrow. Only this one category retries, and only once. A
+        vendor rejection of Connect is reported as-is, because nothing was
+        cleaned up and repeating it would just spend the deadline twice.
+        """
+        attempts = _CONNECT_RETRIES + 1
+        for attempt in range(1, attempts + 1):
+            try:
+                response, _ = self._call(
+                    _ipc.OP_OPEN_SESSION,
+                    i32=abi_mode,
+                    text=device_key,
+                    operation="open_session",
+                )
+                return response
+            except CameraConnectionError as exc:
+                if attempt == attempts or not getattr(
+                    exc, "_connect_callback_timeout", False
+                ):
+                    raise
+        raise AssertionError("unreachable")  # pragma: no cover
+
     def open_session(
         self,
         device_key: str,
@@ -537,12 +627,7 @@ class HostBackend(
             SessionMode.CONTENTS_TRANSFER: 1,
             SessionMode.REMOTE_TRANSFER: 2,
         }[mode]
-        response, _ = self._call(
-            _ipc.OP_OPEN_SESSION,
-            i32=abi_mode,
-            text=device_key,
-            operation="open_session",
-        )
+        response = self._open_with_retry(abi_mode, device_key)
         self._session_counter += 1
         session_id = f"host-session-{self._session_counter}"
         self._handles[session_id] = response.handle

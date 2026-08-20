@@ -24,6 +24,12 @@ Run as ``python fake_host.py [behaviour]``. Behaviours:
     postview_config_refused
                       refuses postview configuration but still delivers
     stuck_live_view   keeps returning the same frame number
+    connect_timeout_once
+                      first session open reports the connection-callback
+                      timeout, later ones succeed
+    connect_timeout_always
+                      every session open reports the connection-callback
+                      timeout
 """
 
 from __future__ import annotations
@@ -43,6 +49,7 @@ STATE = {
     "initialised": False,
     "cameras": [],
     "sessions": {},        # handle -> {"generation": int, "open": bool}
+    "open_attempts": 0,
     "next_slot": 1,
     "generation": 0,
     "events": [],
@@ -309,6 +316,19 @@ def handle_request(out, request_id: int, meta: bytes) -> bool:
         return True
 
     if op == _ipc.OP_OPEN_SESSION:
+        # The camera was still holding a previous transport session, so Connect
+        # was accepted and the connection callback never came. A real host has
+        # already disconnected and released the device by the time it answers
+        # this, which is why one more attempt is worth making.
+        if BEHAVIOUR == "connect_timeout_always" or (
+            BEHAVIOUR == "connect_timeout_once" and not STATE["open_attempts"]
+        ):
+            STATE["open_attempts"] += 1
+            respond(out, request_id, status=-9,
+                    category=_ipc.CAT_CONNECT_TIMEOUT,
+                    message=b"timed out waiting for the connection callback")
+            return True
+        STATE["open_attempts"] += 1
         STATE["generation"] += 1
         slot = STATE["next_slot"]
         STATE["next_slot"] += 1

@@ -77,6 +77,7 @@ CAT_NOT_CONNECTED = 8
 CAT_TIMEOUT = 9
 CAT_NOT_FOUND = 10
 CAT_BUSY = 11
+CAT_CONNECT_TIMEOUT = 12
 
 #: magic, version_major, message_type, request_id, meta_len, blob_len, reserved
 _HEADER = struct.Struct("<IHHIIII")
