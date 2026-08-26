@@ -42,7 +42,7 @@ extern "C" {
 
 /* Bump major on any incompatible change; both sides reject a mismatch. */
 #define CRSDKPY_IPC_VERSION_MAJOR 1
-#define CRSDKPY_IPC_VERSION_MINOR 0
+#define CRSDKPY_IPC_VERSION_MINOR 1
 
 /* Refuse absurd frames rather than attempting a huge allocation. */
 #define CRSDKPY_IPC_MAX_META (1u << 16)
@@ -84,6 +84,8 @@ extern "C" {
 #define CRSDKPY_OP_PROPERTY_STRING    21
 /* Reads a property's advertised value set. i32_result carries the shape. */
 #define CRSDKPY_OP_PROPERTY_VALUES    22
+#define CRSDKPY_OP_START_CONTENT_DOWNLOAD 23
+#define CRSDKPY_OP_CANCEL_CONTENT_DOWNLOAD 24
 /* Test-only: makes the host terminate abruptly so process-death handling can
  * be exercised without provoking a real native fault. */
 #define CRSDKPY_OP_TEST_CRASH      900

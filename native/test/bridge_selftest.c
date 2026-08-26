@@ -29,6 +29,11 @@ int main(int argc, char** argv)
     const int32_t version = crsdkpy_abi_version();
     printf("abi version: %d.%d\n", (version >> 16) & 0xFFFF, version & 0xFFFF);
     printf("adapter dir: %s\n", adapter_dir ? adapter_dir : "(none)");
+    if (((version >> 16) & 0xFFFF) != CRSDKPY_ABI_VERSION_MAJOR ||
+        (version & 0xFFFF) != CRSDKPY_ABI_VERSION_MINOR) {
+        fprintf(stderr, "ABI version mismatch\n");
+        return 2;
+    }
 
     int32_t status = crsdkpy_init(adapter_dir);
     printf("init: %d\n", status);
@@ -36,6 +41,17 @@ int main(int argc, char** argv)
         print_error();
         return 1;
     }
+
+    status = crsdkpy_start_content_download(0, CRSDKPY_SLOT_1, 1, 1,
+                                            "selftest.bin");
+    printf("download with invalid handle: %d (expected %d)\n", status,
+           CRSDKPY_ERR_INVALID_HANDLE);
+    if (status != CRSDKPY_ERR_INVALID_HANDLE) return 3;
+
+    status = crsdkpy_cancel_content_download(0);
+    printf("cancel with invalid handle: %d (expected %d)\n", status,
+           CRSDKPY_ERR_INVALID_HANDLE);
+    if (status != CRSDKPY_ERR_INVALID_HANDLE) return 4;
 
     uint32_t count = 0;
     status = crsdkpy_enumerate(3, &count);

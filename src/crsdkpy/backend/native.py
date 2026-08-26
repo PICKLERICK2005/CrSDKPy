@@ -1208,6 +1208,53 @@ class NativeBackend(
         data = bytes(bytearray(buffer[: size.value]))
         return build_postview(data, info, timestamp_ms=self._clock.now_ms())
 
+    def start_content_download(
+        self, session_id: str, content: ContentRef, destination: str
+    ) -> None:
+        handle = self._handle(session_id, "start_content_download")
+        self._require_content_mode(
+            session_id, "start_content_download", "original_transfer"
+        )
+        _cabi.check(
+            self._lib,
+            self._lib.crsdkpy_start_content_download(
+                handle,
+                content.slot,
+                content.content_id,
+                content.file_id,
+                destination.encode("utf-8"),
+            ),
+            "start_content_download",
+        )
+
+    def cancel_content_download(self, session_id: str) -> None:
+        handle = self._handle(session_id, "cancel_content_download")
+        _cabi.check(
+            self._lib,
+            self._lib.crsdkpy_cancel_content_download(handle),
+            "cancel_content_download",
+        )
+
+    def take_transfer_path(self, session_id: str) -> Optional[str]:
+        handle = self._handle(session_id, "take_transfer_path")
+        size = ctypes.c_uint32(0)
+        status = self._lib.crsdkpy_take_transfer_path(
+            handle, None, 0, ctypes.byref(size)
+        )
+        if status == _cabi.ERR_NOT_FOUND:
+            return None
+        if status not in (_cabi.OK, _cabi.ERR_BUFFER_TOO_SMALL):
+            _cabi.check(self._lib, status, "take_transfer_path")
+        buffer = ctypes.create_string_buffer(size.value)
+        _cabi.check(
+            self._lib,
+            self._lib.crsdkpy_take_transfer_path(
+                handle, buffer, size.value, ctypes.byref(size)
+            ),
+            "take_transfer_path",
+        )
+        return buffer.value.decode("utf-8")
+
     # -- content index -----------------------------------------------------
     def _require_content_mode(self, session_id: str, operation: str,
                               capability: str) -> None:

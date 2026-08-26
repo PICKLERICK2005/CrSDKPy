@@ -51,6 +51,7 @@ def test_bridge_loads_and_abi_matches() -> None:
     lib = _cabi.load_bridge()
     version = lib.crsdkpy_abi_version()
     assert (version >> 16) & 0xFFFF == _cabi.ABI_VERSION_MAJOR
+    assert version & 0xFFFF == _cabi.ABI_VERSION_MINOR
 
 
 @requires_bridge

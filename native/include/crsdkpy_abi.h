@@ -47,7 +47,7 @@ extern "C" {
 /* Bump the major component on any incompatible layout or signature change.
  * Python refuses to load a library whose major version it does not know. */
 #define CRSDKPY_ABI_VERSION_MAJOR 1
-#define CRSDKPY_ABI_VERSION_MINOR 3
+#define CRSDKPY_ABI_VERSION_MINOR 4
 
 /* ---- status codes ---------------------------------------------------- */
 #define CRSDKPY_OK                    0
@@ -63,6 +63,7 @@ extern "C" {
 #define CRSDKPY_ERR_TIMEOUT          (-10)
 #define CRSDKPY_ERR_UNSUPPORTED      (-11)
 #define CRSDKPY_ERR_NOT_CONNECTED    (-12)
+#define CRSDKPY_ERR_BUSY             (-13)
 
 /* ---- enumerations ----------------------------------------------------- */
 /* Control mode, matching the vendor's own ordering. */
@@ -330,6 +331,17 @@ CRSDKPY_API int32_t crsdkpy_property_string(uint64_t handle, uint32_t code,
 CRSDKPY_API int32_t crsdkpy_take_transfer_path(uint64_t handle, char* out,
                                               uint32_t capacity,
                                               uint32_t* out_length);
+
+/* Start writing one original content file to an explicit UTF-8 local path.
+ * The identifiers are copied integers from crsdkpy_content; no vendor content
+ * handle is involved. One file transfer may be active per session. */
+CRSDKPY_API int32_t crsdkpy_start_content_download(
+    uint64_t handle, uint32_t slot, uint32_t content_id, uint32_t file_id,
+    const char* destination_utf8);
+
+/* Request documented cancellation of the active file transfer. Idempotent
+ * when no transfer is active or it has already reached a terminal callback. */
+CRSDKPY_API int32_t crsdkpy_cancel_content_download(uint64_t handle);
 
 /* Initialise the vendor SDK. Idempotent per process.
  *

@@ -850,6 +850,109 @@ def test_an_unrecognised_transfer_code_keeps_the_vendor_value() -> None:
     assert event.percent == 77
 
 
+def _host_download(behaviour, tmp_path):
+    sdk = crsdkpy.SDK(backend=make_backend(behaviour))
+    session = sdk.discover()[0].open(crsdkpy.SessionMode.REMOTE_TRANSFER)
+    content = crsdkpy.CapturedContent(
+        content_id=131_401,
+        file_id=7,
+        path="/DCIM/100MSDCF/DSC00001.ARW",
+        slot=1,
+    )
+    target = tmp_path / "t\u00e9st" / "original.arw"
+    return sdk, session, content, target
+
+
+def test_public_download_crosses_host_ipc_and_consumes_path_once(tmp_path) -> None:
+    sdk, session, content, target = _host_download("normal", tmp_path)
+    try:
+        transfer = session.content.download(content, target)
+        assert transfer.wait() == target
+        assert transfer.wait() == target
+        assert transfer.successful
+        assert transfer.percent == 100
+        assert session._backend.take_transfer_path(session._id) is None
+    finally:
+        sdk.close()
+
+
+def test_download_callback_before_start_response_is_not_lost(tmp_path) -> None:
+    sdk, session, content, target = _host_download(
+        "download_callback_first", tmp_path
+    )
+    try:
+        assert session.content.download(content, target).wait() == target
+    finally:
+        sdk.close()
+
+
+def test_second_active_download_is_rejected(tmp_path) -> None:
+    sdk, session, content, target = _host_download("normal", tmp_path)
+    try:
+        first = session.content.download(content, target)
+        with pytest.raises(crsdkpy.CameraBusyError):
+            session.content.download(content, tmp_path / "second.arw")
+        assert first.wait() == target
+    finally:
+        sdk.close()
+
+
+@pytest.mark.parametrize(
+    ("behaviour", "error"),
+    [
+        ("download_start_failure", crsdkpy.CameraConnectionError),
+        ("download_failed", crsdkpy.BackendError),
+        ("download_busy", crsdkpy.CameraBusyError),
+        ("download_storage_full", crsdkpy.BackendError),
+    ],
+)
+def test_download_failures_reach_the_caller(tmp_path, behaviour, error) -> None:
+    sdk, session, content, target = _host_download(behaviour, tmp_path)
+    try:
+        with pytest.raises(error):
+            transfer = session.content.download(content, target)
+            transfer.wait()
+    finally:
+        sdk.close()
+
+
+def test_download_cancel_is_idempotent_after_terminal_state(tmp_path) -> None:
+    sdk, session, content, target = _host_download("normal", tmp_path)
+    try:
+        transfer = session.content.download(content, target)
+        transfer.cancel()
+        transfer.cancel()
+        with pytest.raises(crsdkpy.BackendError, match="canceled"):
+            transfer.wait()
+        # A completed transfer is immutable and cancellation becomes local no-op.
+        transfer.cancel()
+        assert transfer.outcome is crsdkpy.TransferOutcome.CANCELED
+    finally:
+        sdk.close()
+
+
+def test_cancel_after_success_does_not_replace_terminal_state(tmp_path) -> None:
+    sdk, session, content, target = _host_download("normal", tmp_path)
+    try:
+        transfer = session.content.download(content, target)
+        assert transfer.wait() == target
+        transfer.cancel()
+        assert transfer.outcome is crsdkpy.TransferOutcome.OK
+        assert transfer.wait() == target
+    finally:
+        sdk.close()
+
+
+def test_host_death_releases_download_waiter(tmp_path) -> None:
+    sdk, session, content, target = _host_download("download_host_death", tmp_path)
+    try:
+        transfer = session.content.download(content, target)
+        with pytest.raises(crsdkpy.BackendError, match="host process ended"):
+            transfer.wait(timeout_ms=5_000)
+    finally:
+        sdk.close()
+
+
 def test_string_properties_report_their_string_not_zero() -> None:
     """String-valued properties answer through a different vendor accessor.
 

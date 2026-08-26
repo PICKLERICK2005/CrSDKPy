@@ -71,6 +71,10 @@ class Scenario:
     #: identity is caught out.
     stale_preview: bool = False
 
+    # -- original transfer ------------------------------------------------
+    transfer_outcome: str = "ok"
+    transfer_delay_ms: int = 500
+
     # -- live view ---------------------------------------------------------
     #: The info call succeeds while reporting a zero buffer.
     live_view_info_ok_but_empty: bool = False
@@ -121,6 +125,9 @@ SCENARIOS: dict[str, Scenario] = {
         Scenario(name="delayed_content", content_extra_delay_ms=3_000),
         Scenario(name="non_contiguous_content", content_id_step=2),
         Scenario(name="stale_preview", stale_preview=True),
+        Scenario(name="transfer_busy", transfer_outcome="busy"),
+        Scenario(name="transfer_failed", transfer_outcome="failed"),
+        Scenario(name="transfer_storage_full", transfer_outcome="storage_full"),
         Scenario(name="live_view_empty_info", live_view_info_ok_but_empty=True),
         Scenario(name="live_view_fetch_fails", live_view_fetch_fails=True),
         Scenario(name="reconnect", reconnect_after_ms=1_000),

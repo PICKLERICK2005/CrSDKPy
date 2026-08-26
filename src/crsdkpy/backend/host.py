@@ -439,6 +439,7 @@ class HostBackend(
         i32_2: int = 0,
         text: str = "",
         operation: str = "",
+        blob: bytes = b"",
     ):
         """Send one request and wait for its matching response."""
         response, blob, _ = self._call_ex(
@@ -449,6 +450,7 @@ class HostBackend(
             i32_2=i32_2,
             text=text,
             operation=operation,
+            blob=blob,
         )
         return response, blob
 
@@ -463,6 +465,7 @@ class HostBackend(
         text: str = "",
         operation: str = "",
         extra: bytes = b"",
+        blob: bytes = b"",
     ):
         """Send one request and wait for its matching response.
 
@@ -485,7 +488,8 @@ class HostBackend(
             request_id = self._next_request_id()
             self._write(
                 _ipc.encode(
-                    _ipc.MSG_REQUEST, request_id, _ipc.as_bytes(request) + extra
+                    _ipc.MSG_REQUEST, request_id,
+                    _ipc.as_bytes(request) + extra, blob
                 )
             )
 
@@ -902,14 +906,42 @@ class HostBackend(
 
     def take_transfer_path(self, session_id: str) -> Optional[str]:
         handle = self._handle(session_id, "take_transfer_path")
-        response, _ = self._call(
+        response, blob = self._call(
             _ipc.OP_TAKE_TRANSFER_PATH,
             handle=handle,
             operation="take_transfer_path",
         )
         if response.count == 0:
             return None  # nothing written yet
-        return response.message.decode("utf-8", "replace") or None
+        return blob.decode("utf-8") if blob else None
+
+    def start_content_download(
+        self, session_id: str, content: ContentRef, destination: str
+    ) -> None:
+        handle = self._handle(session_id, "start_content_download")
+        self._require_content_mode(
+            session_id, "start_content_download", "original_transfer"
+        )
+        args = _ipc.ContentArgsStruct(
+            slot=content.slot,
+            content_id=content.content_id,
+            file_id=content.file_id,
+        )
+        self._call_ex(
+            _ipc.OP_START_CONTENT_DOWNLOAD,
+            handle=handle,
+            operation="start_content_download",
+            extra=_ipc.as_bytes(args),
+            blob=destination.encode("utf-8"),
+        )
+
+    def cancel_content_download(self, session_id: str) -> None:
+        handle = self._handle(session_id, "cancel_content_download")
+        self._call(
+            _ipc.OP_CANCEL_CONTENT_DOWNLOAD,
+            handle=handle,
+            operation="cancel_content_download",
+        )
 
     # -- content index -----------------------------------------------------
     def _require_content_mode(

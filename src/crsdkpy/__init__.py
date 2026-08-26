@@ -91,6 +91,7 @@ from .properties import (
 from .sdk import SDK
 from .session import Session
 from .status import BatteryStatus, StorageSlot
+from .transfers import ContentDownload
 from .video import Recording, Video
 
 __all__ = [
@@ -132,6 +133,7 @@ __all__ = [
     "Capture",
     "CapturedContent",
     "Content",
+    "ContentDownload",
     "CaptureState",
     "FocusResult",
     "FocusState",

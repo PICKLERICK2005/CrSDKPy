@@ -24,6 +24,7 @@
 // duplicated for exclusive protocol use, then the C-level stdout is redirected
 // to the null device before the vendor library is touched.
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -148,6 +149,7 @@ int32_t categorise(int32_t status)
     case CRSDKPY_ERR_TIMEOUT:          return CRSDKPY_CAT_TIMEOUT;
     case CRSDKPY_ERR_NOT_FOUND:        return CRSDKPY_CAT_NOT_FOUND;
     case CRSDKPY_ERR_INVALID_ARG:      return CRSDKPY_CAT_INVALID_ARG;
+    case CRSDKPY_ERR_BUSY:             return CRSDKPY_CAT_BUSY;
     default:                           return CRSDKPY_CAT_VENDOR;
     }
 }
@@ -169,6 +171,7 @@ void attach_bridge_error(crsdkpy_ipc_response& response)
 // it is appended to the response meta.
 void dispatch(const crsdkpy_ipc_request& request,
               const crsdkpy_ipc_content_args& content,
+              const std::vector<char>& blob_in,
               crsdkpy_ipc_response& response, std::vector<char>& blob_out,
               std::vector<char>& meta_tail)
 {
@@ -179,6 +182,29 @@ void dispatch(const crsdkpy_ipc_request& request,
     switch (request.op) {
     case CRSDKPY_OP_PING:
         return;
+
+    case CRSDKPY_OP_START_CONTENT_DOWNLOAD: {
+        if (blob_in.empty() ||
+            std::find(blob_in.begin(), blob_in.end(), '\0') != blob_in.end()) {
+            fill(response, CRSDKPY_ERR_INVALID_ARG, CRSDKPY_CAT_INVALID_ARG,
+                 "destination must be non-empty UTF-8 without NUL bytes");
+            return;
+        }
+        const std::string destination(blob_in.begin(), blob_in.end());
+        const int32_t status = crsdkpy_start_content_download(
+            request.handle, content.slot, content.content_id, content.file_id,
+            destination.c_str());
+        fill(response, status, categorise(status), "");
+        if (status != CRSDKPY_OK) attach_bridge_error(response);
+        return;
+    }
+
+    case CRSDKPY_OP_CANCEL_CONTENT_DOWNLOAD: {
+        const int32_t status = crsdkpy_cancel_content_download(request.handle);
+        fill(response, status, categorise(status), "");
+        if (status != CRSDKPY_OK) attach_bridge_error(response);
+        return;
+    }
 
     case CRSDKPY_OP_INIT: {
         const char* adapter = request.text[0] ? request.text : nullptr;
@@ -498,8 +524,9 @@ void dispatch(const crsdkpy_ipc_request& request,
             attach_bridge_error(response);
             return;
         }
-        fill(response, CRSDKPY_OK, CRSDKPY_CAT_NONE, path.data());
+        fill(response, CRSDKPY_OK, CRSDKPY_CAT_NONE, "");
         response.count = length;
+        blob_out.assign(path.begin(), path.begin() + length);
         return;
     }
 
@@ -699,7 +726,7 @@ int main(int argc, char** argv)
         crsdkpy_ipc_response response;
         std::vector<char> out_blob;
         std::vector<char> out_meta_tail;
-        dispatch(request, content, response, out_blob, out_meta_tail);
+        dispatch(request, content, blob, response, out_blob, out_meta_tail);
 
         std::vector<char> out_meta(sizeof(response) + out_meta_tail.size());
         std::memcpy(out_meta.data(), &response, sizeof(response));

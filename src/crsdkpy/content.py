@@ -12,12 +12,15 @@ Identifiers are monotonic but **not** contiguous. Detect new content with
 from __future__ import annotations
 
 from collections.abc import Sequence
+from os import PathLike
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Union
 
 from .capture import CapturedContent
 from .enums import PreviewKind
-from .errors import UnsupportedOperationError
+from .errors import CameraBusyError, UnsupportedOperationError
 from .previews import Preview
+from .transfers import ContentDownload
 
 if TYPE_CHECKING:  # pragma: no cover
     from .session import Session
@@ -30,6 +33,7 @@ class Content:
 
     def __init__(self, session: Session) -> None:
         self._session = session
+        self._active_download: Optional[ContentDownload] = None
 
     @property
     def available(self) -> bool:
@@ -91,6 +95,44 @@ class Content:
         )
         return session._backend.get_preview(session._id, content_id, kind)
 
+    def download(
+        self,
+        content: CapturedContent,
+        destination: Union[str, PathLike[str]],
+        *,
+        overwrite: bool = False,
+    ) -> ContentDownload:
+        """Start downloading the exact original file represented by *content*.
+
+        *destination* may be a filename or an existing directory. Existing
+        files are refused unless ``overwrite=True``. Only one original-file
+        transfer may be active per session because Sony's completion callback
+        does not carry a caller-defined request identifier.
+        """
+        self._require("content.download")
+        if self._active_download is not None and not self._active_download.finished:
+            raise CameraBusyError(
+                "one original-file download is already active for this session",
+                operation="content.download",
+            )
+        if not isinstance(content, CapturedContent):
+            raise TypeError(
+                "content.download requires a CapturedContent with file identity"
+            )
+        target = Path(destination)
+        if target.is_dir():
+            if not content.filename:
+                raise ValueError("a directory destination requires content.filename")
+            target = target / content.filename
+        if target.exists() and not overwrite:
+            raise FileExistsError(str(target))
+        target.parent.mkdir(parents=True, exist_ok=True)
+        session = self._session
+        operation = ContentDownload(session, content, target)
+        operation._start()
+        self._active_download = operation
+        return operation
+
     def __iter__(self):
         return iter(self.since())
 
@@ -111,4 +153,5 @@ def _project(ref) -> CapturedContent:
         width=ref.width,
         height=ref.height,
         file_size=ref.file_size,
+        slot=ref.slot,
     )

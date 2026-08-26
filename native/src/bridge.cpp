@@ -117,16 +117,38 @@ std::string to_utf8(const CrInt16u* text)
     return out;
 }
 
-// The inverse of narrow(), for the few vendor calls that take a path. Paths
-// are widened byte-for-byte, which covers ASCII; a non-ASCII path is rejected
-// by the caller rather than silently mangled here.
-std::vector<CrChar> widen(const std::string& text)
+std::string crchar_to_utf8(const CrChar* text)
 {
+#if defined(_WIN32)
+    return to_utf8(reinterpret_cast<const CrInt16u*>(text));
+#else
+    return text ? std::string(text) : std::string();
+#endif
+}
+
+// Convert caller UTF-8 into the vendor's path representation without lossy
+// byte widening. Paths are UTF-16 on Windows and UTF-8 elsewhere.
+std::vector<CrChar> from_utf8(const std::string& text)
+{
+#if defined(_WIN32)
+    if (text.empty()) return std::vector<CrChar>(1, 0);
+    const int count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+                                          text.data(), static_cast<int>(text.size()),
+                                          nullptr, 0);
+    if (count <= 0) return std::vector<CrChar>();
+    std::vector<CrChar> out(static_cast<size_t>(count) + 1, 0);
+    if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(),
+                            static_cast<int>(text.size()), out.data(), count) <= 0) {
+        return std::vector<CrChar>();
+    }
+    return out;
+#else
     std::vector<CrChar> out;
     out.reserve(text.size() + 1);
     for (unsigned char c : text) out.push_back(static_cast<CrChar>(c));
     out.push_back(static_cast<CrChar>(0));
     return out;
+#endif
 }
 
 // Reads an environment variable. Uses the bounds-checked form on Windows,
@@ -144,14 +166,6 @@ std::string environment(const char* name)
     const char* value = std::getenv(name);
     return value ? std::string(value) : std::string();
 #endif
-}
-
-bool is_ascii(const std::string& text)
-{
-    for (unsigned char c : text) {
-        if (c >= 0x80) return false;
-    }
-    return true;
 }
 
 // Temporarily switches the process working directory, restoring it on scope
@@ -441,12 +455,16 @@ public:
     // usable.
     void apply_save_info(const std::string& directory)
     {
-        if (directory.empty() || !is_ascii(directory)) {
+        if (directory.empty()) {
             push(CRSDKPY_EVENT_WARNING, CRSDKPY_WARN_SAVE_PATH_UNUSABLE, 0, 0, 0, 0);
             return;
         }
-        std::vector<CrChar> path = widen(directory);
-        std::vector<CrChar> prefix = widen(std::string());
+        std::vector<CrChar> path = from_utf8(directory);
+        std::vector<CrChar> prefix = from_utf8(std::string());
+        if (path.empty()) {
+            push(CRSDKPY_EVENT_WARNING, CRSDKPY_WARN_SAVE_PATH_UNUSABLE, 0, 0, 0, 0);
+            return;
+        }
         // -1 keeps the camera's own file numbering rather than imposing one.
         const auto error =
             SDK::SetSaveInfo(handle_, path.data(), prefix.data(), -1);
@@ -480,6 +498,12 @@ public:
             std::lock_guard<std::mutex> lock(transfer_mutex_);
             transfer_.in_flight = false;
             transfer_.bytes.clear();
+            if (file_transfer_active_ && !file_transfer_terminal_) {
+                file_transfer_active_ = false;
+                file_transfer_terminal_ = true;
+                push(CRSDKPY_EVENT_TRANSFER, 0, 0,
+                     CRSDKPY_TRANSFER_STOPPED, 0, 0);
+            }
         }
         transfer_condition_.notify_all();
         if (handle_) {
@@ -669,13 +693,40 @@ public:
     void on_transfer_file_result(int32_t outcome, uint32_t notify,
                                  uint32_t percent, const std::string& path)
     {
-        if (!path.empty()) {
+        {
             std::lock_guard<std::mutex> lock(transfer_mutex_);
-            transfer_path_ = path;
+            if (!file_transfer_active_ || file_transfer_terminal_) return;
+            if (!path.empty()) transfer_path_ = path;
+            if (outcome != CRSDKPY_TRANSFER_IN_PROGRESS) {
+                file_transfer_terminal_ = true;
+                file_transfer_active_ = false;
+            }
         }
         push(CRSDKPY_EVENT_TRANSFER, notify, static_cast<int32_t>(percent),
              outcome, path.empty() ? 0 : 1, 0);
         transfer_condition_.notify_all();
+    }
+
+    bool begin_file_transfer()
+    {
+        std::lock_guard<std::mutex> lock(transfer_mutex_);
+        if (file_transfer_active_) return false;
+        file_transfer_active_ = true;
+        file_transfer_terminal_ = false;
+        transfer_path_.clear();
+        return true;
+    }
+
+    void reject_file_transfer_start()
+    {
+        std::lock_guard<std::mutex> lock(transfer_mutex_);
+        if (!file_transfer_terminal_) file_transfer_active_ = false;
+    }
+
+    bool file_transfer_active()
+    {
+        std::lock_guard<std::mutex> lock(transfer_mutex_);
+        return file_transfer_active_;
     }
 
     // Non-destructive, so a caller can size a buffer without consuming the
@@ -756,6 +807,8 @@ private:
     std::condition_variable transfer_condition_;
     PendingTransfer transfer_;
     std::string transfer_path_;
+    bool file_transfer_active_ = false;
+    bool file_transfer_terminal_ = false;
 
     std::mutex postview_mutex_;
     PostviewPending postview_;
@@ -871,7 +924,7 @@ void Callback::OnNotifyRemoteTransferResult(CrInt32u notify, CrInt32u per,
     // Copied here: the string belongs to the vendor and is not valid once this
     // returns.
     session_->on_transfer_file_result(transfer_outcome(notify), notify, per,
-                                      narrow(filename));
+                                      crchar_to_utf8(filename));
 }
 
 void Callback::OnNotifyRemoteTransferResult(CrInt32u notify, CrInt32u per,
@@ -1768,6 +1821,74 @@ int32_t crsdkpy_pull_postview(uint64_t handle, crsdkpy_postview_info* out_info)
     out_info->pulled_ms = pulled;
     copy_string(out_info->filename, sizeof(out_info->filename), pending.filename);
     session->hold_postview(std::move(buffer), pulled);
+    return CRSDKPY_OK;
+}
+
+int32_t crsdkpy_start_content_download(uint64_t handle, uint32_t slot,
+                                      uint32_t content_id, uint32_t file_id,
+                                      const char* destination_utf8)
+{
+    set_error("");
+    if (!destination_utf8 || !*destination_utf8 || !content_id || !file_id) {
+        return CRSDKPY_ERR_INVALID_ARG;
+    }
+    if (slot == 0) slot = CRSDKPY_SLOT_1;
+    std::shared_ptr<Session> session;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        session = resolve(handle);
+        if (!session) return CRSDKPY_ERR_INVALID_HANDLE;
+    }
+    if (session->state() != CRSDKPY_STATE_CONNECTED) return CRSDKPY_ERR_NOT_CONNECTED;
+    if (session->mode() != CRSDKPY_MODE_REMOTE_TRANSFER) {
+        set_error("original-file download requires RemoteTransfer control mode");
+        return CRSDKPY_ERR_UNSUPPORTED;
+    }
+    if (!session->begin_file_transfer()) {
+        set_error("an original-file transfer is already active for this session");
+        return CRSDKPY_ERR_BUSY;
+    }
+
+    const std::string destination(destination_utf8);
+    const size_t separator = destination.find_last_of("/\\");
+    const std::string directory = separator == std::string::npos
+        ? std::string(".") : destination.substr(0, separator);
+    const std::string filename = separator == std::string::npos
+        ? destination : destination.substr(separator + 1);
+    std::vector<CrChar> path = from_utf8(directory);
+    std::vector<CrChar> name = from_utf8(filename);
+    if (path.empty() || name.empty() || filename.empty()) {
+        session->reject_file_transfer_start();
+        set_error("download destination is not valid UTF-8 or has no filename");
+        return CRSDKPY_ERR_INVALID_ARG;
+    }
+    const auto error = SDK::GetRemoteTransferContentsDataFile(
+        session->handle(), static_cast<SDK::CrSlotNumber>(slot), content_id,
+        file_id, 0x01000000u, path.data(), name.data());
+    if (error != SDK::CrError_None) {
+        session->reject_file_transfer_start();
+        set_error("the camera rejected the original-file transfer request");
+        return static_cast<int32_t>(error);
+    }
+    return CRSDKPY_OK;
+}
+
+int32_t crsdkpy_cancel_content_download(uint64_t handle)
+{
+    set_error("");
+    std::shared_ptr<Session> session;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        session = resolve(handle);
+        if (!session) return CRSDKPY_ERR_INVALID_HANDLE;
+    }
+    if (!session->file_transfer_active()) return CRSDKPY_OK;
+    const auto error = SDK::ControlGetRemoteTransferContentsDataFile(
+        session->handle(), SDK::CrGetContentsDataControlType_Cancel);
+    if (error != SDK::CrError_None) {
+        set_error("the camera rejected original-file transfer cancellation");
+        return static_cast<int32_t>(error);
+    }
     return CRSDKPY_OK;
 }
 

@@ -118,7 +118,17 @@ capture.exposed                       # the camera confirmed an exposure
 content = capture.wait_for_content()  # durable media on the card
 preview = capture.preview(crsdkpy.PreviewKind.SCREENNAIL)
 assert preview.is_exact_still
+
+# Original downloads are explicit, asynchronous, and require the documented
+# RemoteTransfer content mode.
+transfer = session.content.download(content, "captures/DSC00001.ARW")
+path = transfer.wait(timeout_ms=60_000)
 ```
+
+Only one original-file download may be active per session. A second start is
+rejected with `CameraBusyError`; `wait()` timing out does not cancel the camera
+operation, and `cancel()` is explicit and idempotent. Existing destination
+files are refused unless `overwrite=True` is requested.
 
 Autofocus is gated: if focus is not confirmed, **no exposure is requested**.
 

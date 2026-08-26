@@ -55,7 +55,9 @@ STATE = {
     "open_attempts": 0,
     "transfer_polls": 0,
     "open_reconnect": [],   # reconnect policy seen per open request
-    "transfer_path": "C:/saved/DSC09999.ARW",
+    "transfer_path": (
+        "C:/saved/DSC09999.ARW" if BEHAVIOUR == "transfer_file" else ""
+    ),
     # Advertised value sets. Shapes are taken from what a real body reports --
     # a range is three numbers, a list is itself -- with invented contents.
     "values": {
@@ -110,6 +112,9 @@ STATE = {
     "postview_pending": 0,      # announced byte length, 0 when nothing waiting
     "frame_number": 0,
     "live_view_blocked": 0,     # frames still to be swallowed after a capture
+    "transfer_active": False,
+    "transfer_terminal": False,
+    "transfer_destination": "",
 }
 
 #: Vendor control mode that exposes the content index.
@@ -311,7 +316,7 @@ def _drive_autofocus(*, engaged: bool) -> None:
     STATE["events"].append(make_event(1, 0x0707))
 
 
-def handle_request(out, request_id: int, meta: bytes) -> bool:
+def handle_request(out, request_id: int, meta: bytes, blob: bytes = b"") -> bool:
     request = _ipc.from_bytes(_ipc.RequestStruct, meta)
     op = request.op
     fixed = _cabi.ctypes.sizeof(_ipc.RequestStruct)
@@ -353,12 +358,47 @@ def handle_request(out, request_id: int, meta: bytes) -> bool:
     if op == _ipc.OP_TAKE_TRANSFER_PATH:
         # Only the success behaviour ever produces a path, and it is consumed
         # once, exactly as the real host does.
-        if BEHAVIOUR == "transfer_file" and STATE["transfer_path"]:
+        if STATE["transfer_path"]:
             path = STATE["transfer_path"].encode()
             STATE["transfer_path"] = ""
-            respond(out, request_id, message=path, count=len(path))
+            respond(out, request_id, blob=path, count=len(path))
         else:
             respond(out, request_id, count=0)
+        return True
+
+    if op == _ipc.OP_START_CONTENT_DOWNLOAD:
+        if BEHAVIOUR == "download_start_failure":
+            respond(out, request_id, status=0x1234, category=_ipc.CAT_VENDOR,
+                    message=b"start rejected")
+            return True
+        if STATE["transfer_active"]:
+            respond(out, request_id, status=-13, category=_ipc.CAT_BUSY,
+                    message=b"one transfer is already active")
+            return True
+        STATE["transfer_active"] = True
+        STATE["transfer_terminal"] = False
+        STATE["transfer_destination"] = blob.decode("utf-8")
+        STATE["transfer_polls"] = 0
+        if BEHAVIOUR == "download_callback_first":
+            STATE["events"].append(make_event(
+                _cabi.EVENT_TRANSFER, 0x20100, 100, _cabi.TRANSFER_OK, 1))
+            # A broken/late duplicate must not replace the first terminal
+            # result in the public operation.
+            STATE["events"].append(make_event(
+                _cabi.EVENT_TRANSFER, 0x20101, 100, _cabi.TRANSFER_FAILED, 0))
+            STATE["transfer_path"] = STATE["transfer_destination"]
+            STATE["transfer_active"] = False
+            STATE["transfer_terminal"] = True
+        respond(out, request_id)
+        return True
+
+    if op == _ipc.OP_CANCEL_CONTENT_DOWNLOAD:
+        if STATE["transfer_active"] and not STATE["transfer_terminal"]:
+            STATE["events"].append(make_event(
+                _cabi.EVENT_TRANSFER, 0x2010E, 0, _cabi.TRANSFER_CANCELED, 0))
+            STATE["transfer_active"] = False
+            STATE["transfer_terminal"] = True
+        respond(out, request_id)
         return True
 
     if op == _ipc.OP_OPEN_SESSION:
@@ -413,12 +453,41 @@ def handle_request(out, request_id: int, meta: bytes) -> bool:
         _ipc.OP_PULL_POSTVIEW,
         _ipc.OP_LIVE_VIEW_INFO,
         _ipc.OP_LIVE_VIEW_FRAME,
+        _ipc.OP_START_CONTENT_DOWNLOAD,
+        _ipc.OP_CANCEL_CONTENT_DOWNLOAD,
     ):
         respond(out, request_id, status=-5, category=_ipc.CAT_STALE_HANDLE,
                 message=b"stale or unknown session handle")
         return True
 
     if op == _ipc.OP_POLL_EVENTS:
+        if BEHAVIOUR == "download_host_death" and STATE["transfer_active"]:
+            sys.exit(92)
+        if STATE["transfer_active"]:
+            step = STATE["transfer_polls"]
+            STATE["transfer_polls"] += 1
+            if step == 0:
+                STATE["events"].append(make_event(
+                    _cabi.EVENT_TRANSFER, 0x2010C, 35,
+                    _cabi.TRANSFER_IN_PROGRESS, 0))
+            elif step == 1:
+                outcome = {
+                    "download_failed": _cabi.TRANSFER_FAILED,
+                    "download_busy": _cabi.TRANSFER_BUSY,
+                    "download_storage_full": _cabi.TRANSFER_STORAGE_FULL,
+                }.get(BEHAVIOUR, _cabi.TRANSFER_OK)
+                code = {
+                    _cabi.TRANSFER_FAILED: 0x20101,
+                    _cabi.TRANSFER_BUSY: 0x20103,
+                    _cabi.TRANSFER_STORAGE_FULL: 0x20104,
+                }.get(outcome, 0x20100)
+                STATE["events"].append(make_event(
+                    _cabi.EVENT_TRANSFER, code, 100, outcome,
+                    1 if outcome == _cabi.TRANSFER_OK else 0))
+                if outcome == _cabi.TRANSFER_OK:
+                    STATE["transfer_path"] = STATE["transfer_destination"]
+                STATE["transfer_active"] = False
+                STATE["transfer_terminal"] = True
         # A file-writing transfer reports progress and then an outcome through
         # the same notification, so the poll hands them out in that order.
         if BEHAVIOUR in ("transfer_file", "transfer_file_ng"):
@@ -688,7 +757,7 @@ def main() -> int:
         frame = _ipc.read_frame(stdin)
         if frame is None:
             return 0
-        message_type, request_id, meta, _blob = frame
+        message_type, request_id, meta, blob = frame
 
         if message_type == _ipc.MSG_HELLO:
             if BEHAVIOUR == "die_on_hello":
@@ -719,7 +788,7 @@ def main() -> int:
                     message=b"unknown message type")
             continue
 
-        handle_request(stdout, request_id, meta)
+        handle_request(stdout, request_id, meta, blob)
 
 
 if __name__ == "__main__":

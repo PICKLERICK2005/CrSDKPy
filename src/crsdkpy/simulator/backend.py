@@ -15,6 +15,7 @@ import itertools
 import random
 import struct
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import Any, Callable, Optional
 
 from ..backend.contract import Backend, BackendCameraInfo, ContentRef, LiveViewInfo
@@ -29,6 +30,7 @@ from ..enums import (
     RecordingState,
     SessionMode,
     StillDestination,
+    TransferOutcome,
 )
 from ..errors import (
     CameraBusyError,
@@ -46,6 +48,7 @@ from ..events import (
     FocusSource,
     PropertyChangedEvent,
     RecordingEvent,
+    TransferEvent,
     UnknownEvent,
 )
 from ..previews import LiveViewFrame, Preview
@@ -123,6 +126,8 @@ class _Session:
         #: Path the camera last reported for a file-writing transfer, waiting
         #: to be collected.
         self.transfer_path: Optional[str] = None
+        self.transfer_active = False
+        self.transfer_canceled = False
         self.contents: list[ContentRef] = []
         self.next_content_id = 131_000
         self.capture_sequence = 0
@@ -859,6 +864,68 @@ class SimulatedBackend(Backend):
         path = session.transfer_path
         session.transfer_path = None
         return path
+
+    def start_content_download(
+        self, session_id: str, content: ContentRef, destination: str
+    ) -> None:
+        session = self._live_session(session_id, "start_content_download")
+        self._require_content_index(session, "start_content_download")
+        if session.transfer_active:
+            raise CameraBusyError(
+                "an original-file transfer is already active",
+                operation="content.download",
+            )
+        if not any(
+            item.content_id == content.content_id and item.file_id == content.file_id
+            for item in session.contents
+        ):
+            raise PropertyNotSupportedError(
+                "the requested content/file identity is not present"
+            )
+        session.transfer_active = True
+        session.transfer_canceled = False
+        session.transfer_path = None
+        started = self._clock.now_ms()
+        session.emit(
+            started + 1,
+            TransferEvent(
+                timestamp_ms=started + 1,
+                outcome=TransferOutcome.IN_PROGRESS,
+                percent=0,
+            ),
+        )
+
+        def _finish() -> Sequence[Event]:
+            session.transfer_active = False
+            if session.transfer_canceled:
+                outcome = TransferOutcome.CANCELED
+            else:
+                outcome = {
+                    "ok": TransferOutcome.OK,
+                    "busy": TransferOutcome.BUSY,
+                    "failed": TransferOutcome.FAILED,
+                    "storage_full": TransferOutcome.STORAGE_FULL,
+                }.get(session.scenario.transfer_outcome, TransferOutcome.UNKNOWN)
+            if outcome is TransferOutcome.OK:
+                target = Path(destination)
+                size = content.file_size or 64
+                target.write_bytes(b"II*\x00" + bytes(max(0, size - 4)))
+                session.transfer_path = str(target)
+            return (
+                TransferEvent(
+                    timestamp_ms=self._clock.now_ms(),
+                    outcome=outcome,
+                    percent=100 if outcome is TransferOutcome.OK else 50,
+                    has_path=outcome is TransferOutcome.OK,
+                ),
+            )
+
+        session.schedule(started + session.scenario.transfer_delay_ms, _finish)
+
+    def cancel_content_download(self, session_id: str) -> None:
+        session = self._live_session(session_id, "cancel_content_download")
+        if session.transfer_active:
+            session.transfer_canceled = True
 
     def pull_postview(self, session_id: str) -> Optional[Preview]:
         session = self._live_session(session_id, "pull_postview")

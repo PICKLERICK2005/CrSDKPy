@@ -306,6 +306,23 @@ class Backend:
         """
         raise NotImplementedError  # pragma: no cover
 
+    def start_content_download(
+        self,
+        session_id: str,
+        content: ContentRef,
+        destination: str,
+    ) -> None:  # pragma: no cover
+        """Start an original-file transfer to an explicit local path.
+
+        ``content`` contains copied integer identifiers only. Implementations
+        must not retain a vendor-owned content object or pointer.
+        """
+        raise NotImplementedError
+
+    def cancel_content_download(self, session_id: str) -> None:  # pragma: no cover
+        """Request cancellation of the session's active original transfer."""
+        raise NotImplementedError
+
     def latest_content(  # pragma: no cover
         self, session_id: str
     ) -> Optional[ContentRef]:

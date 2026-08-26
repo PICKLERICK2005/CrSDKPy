@@ -28,6 +28,7 @@ from ctypes import (
 from typing import Optional
 
 from ..errors import (
+    CameraBusyError,
     CameraConnectionError,
     NativeBackendError,
     OperationTimeoutError,
@@ -39,6 +40,7 @@ from ..errors import (
 
 __all__ = [
     "ABI_VERSION_MAJOR",
+    "ABI_VERSION_MINOR",
     "CameraInfoStruct",
     "ContentStruct",
     "EventStruct",
@@ -53,6 +55,7 @@ __all__ = [
 ]
 
 ABI_VERSION_MAJOR = 1
+ABI_VERSION_MINOR = 4
 
 #: Environment variable holding an explicit path to the built bridge.
 LIBRARY_ENV_VAR = "CRSDKPY_BRIDGE"
@@ -70,6 +73,7 @@ ERR_CONNECT_FAILED = -9
 ERR_TIMEOUT = -10
 ERR_UNSUPPORTED = -11
 ERR_NOT_CONNECTED = -12
+ERR_BUSY = -13
 
 # Event kinds, mirroring the header.
 EVENT_CONNECTION = 0
@@ -371,6 +375,19 @@ def _declare(lib: ctypes.CDLL) -> None:
         POINTER(FrameInfoStruct),
     ]
 
+    lib.crsdkpy_start_content_download.restype = c_int32
+    lib.crsdkpy_start_content_download.argtypes = [
+        c_uint64, c_uint32, c_uint32, c_uint32, c_char_p
+    ]
+
+    lib.crsdkpy_cancel_content_download.restype = c_int32
+    lib.crsdkpy_cancel_content_download.argtypes = [c_uint64]
+
+    lib.crsdkpy_take_transfer_path.restype = c_int32
+    lib.crsdkpy_take_transfer_path.argtypes = [
+        c_uint64, POINTER(c_char), c_uint32, POINTER(c_uint32)
+    ]
+
 
 def load_bridge(path: Optional[str] = None) -> ctypes.CDLL:
     """Load and validate the native bridge.
@@ -455,6 +472,12 @@ def check(lib: ctypes.CDLL, status: int, operation: str) -> None:
     if status == ERR_NOT_CONNECTED:
         raise CameraConnectionError(
             "the session is not connected", operation=operation
+        )
+    if status == ERR_BUSY:
+        raise CameraBusyError(
+            f"the camera is busy during {operation}{suffix}",
+            operation=operation,
+            backend_code=status,
         )
     if status == ERR_NOT_INITIALIZED:
         raise NativeBackendError(

@@ -61,6 +61,7 @@ class CapturedContent:
     width: Optional[int] = None
     height: Optional[int] = None
     file_size: Optional[int] = None
+    slot: int = 1
 
     @property
     def filename(self) -> Optional[str]:
