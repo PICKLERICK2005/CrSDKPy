@@ -40,9 +40,15 @@ extern "C" {
 /* 'C''R''P''Y'. Guards against a desynchronised or foreign stream. */
 #define CRSDKPY_IPC_MAGIC 0x43525059u
 
-/* Bump major on any incompatible change; both sides reject a mismatch. */
+/* Bump major on any incompatible change; both sides reject a mismatch.
+ *
+ * Bump minor when an operation is added. The fixed struct layouts stay frozen
+ * either way, so an added operation is additive -- but a host that predates it
+ * answers with "operation is not implemented by this host", which is
+ * indistinguishable from a camera that lacks the feature. The minor is what
+ * lets the client refuse a too-old host during the handshake instead. */
 #define CRSDKPY_IPC_VERSION_MAJOR 1
-#define CRSDKPY_IPC_VERSION_MINOR 1
+#define CRSDKPY_IPC_VERSION_MINOR 2
 
 /* Refuse absurd frames rather than attempting a huge allocation. */
 #define CRSDKPY_IPC_MAX_META (1u << 16)

@@ -331,10 +331,30 @@ class HostBackend(
                 "from this checkout.",
                 operation="host.handshake",
             )
+        # The minor only ever grows by adding operations, so a newer host is
+        # fine and an older one is not: it would complete this handshake, be
+        # reported ready, and then answer a newly added operation with
+        # "not implemented by this host" -- the same UnsupportedOperationError
+        # a camera that genuinely lacks the feature produces. Refusing here is
+        # what keeps a stale binary from reading as a missing capability.
+        if ack.protocol_minor < _ipc.VERSION_MINOR:
+            raise NativeBackendError(
+                f"host speaks IPC protocol {ack.protocol_major}.{ack.protocol_minor}, "
+                f"this build sends operations added in {_ipc.VERSION_MAJOR}."
+                f"{_ipc.VERSION_MINOR}. Rebuild the host from this checkout.",
+                operation="host.handshake",
+            )
         if ack.abi_major != _cabi.ABI_VERSION_MAJOR:
             raise NativeBackendError(
                 f"host was built against C ABI major {ack.abi_major}, this build "
                 f"expects {_cabi.ABI_VERSION_MAJOR}. Rebuild the host.",
+                operation="host.handshake",
+            )
+        if ack.abi_minor < _cabi.ABI_VERSION_MINOR:
+            raise NativeBackendError(
+                f"host was built against C ABI {ack.abi_major}.{ack.abi_minor}, "
+                f"this build calls operations added in {_cabi.ABI_VERSION_MAJOR}."
+                f"{_cabi.ABI_VERSION_MINOR}. Rebuild the host from this checkout.",
                 operation="host.handshake",
             )
         self._handshake = ack

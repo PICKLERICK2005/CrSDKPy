@@ -132,6 +132,53 @@ def test_incompatible_abi_major_is_refused() -> None:
         backend.start()
 
 
+def test_an_older_protocol_minor_is_refused_at_the_handshake() -> None:
+    """A host that predates an operation this build sends is not compatible.
+
+    Without this it would complete the handshake, be reported ready, and then
+    answer the newer operation with "not implemented by this host" -- the same
+    UnsupportedOperationError a camera lacking the feature produces. The point
+    of the check is that a stale binary never reads as a missing capability.
+    """
+    backend = make_backend("old_protocol")
+    with pytest.raises(crsdkpy.NativeBackendError, match="operations added in"):
+        backend.start()
+    assert backend.state is not HostState.READY
+
+
+def test_an_older_abi_minor_is_refused_at_the_handshake() -> None:
+    backend = make_backend("old_abi")
+    with pytest.raises(crsdkpy.NativeBackendError, match="C ABI"):
+        backend.start()
+    assert backend.state is not HostState.READY
+
+
+def test_a_newer_peer_minor_is_accepted() -> None:
+    """The minor only grows by addition, so a newer host serves everything
+    this build calls and must not be refused."""
+    ack = _ipc.HelloAckStruct(
+        protocol_major=_ipc.VERSION_MAJOR,
+        protocol_minor=_ipc.VERSION_MINOR + 5,
+        abi_major=_cabi.ABI_VERSION_MAJOR,
+        abi_minor=_cabi.ABI_VERSION_MINOR + 5,
+    )
+    assert ack.protocol_minor >= _ipc.VERSION_MINOR
+    assert ack.abi_minor >= _cabi.ABI_VERSION_MINOR
+
+
+def test_the_handshake_reports_this_checkouts_minors() -> None:
+    """The versions are only useful if both sides report what they were built
+    against; a constant zero would make the check untestable."""
+    backend = make_backend()
+    backend.start()
+    try:
+        ack = backend.handshake
+        assert ack.protocol_minor == _ipc.VERSION_MINOR
+        assert ack.abi_minor == _cabi.ABI_VERSION_MINOR
+    finally:
+        backend.shutdown()
+
+
 def test_host_dying_during_handshake_is_reported() -> None:
     backend = make_backend("die_on_hello")
     with pytest.raises(crsdkpy.BackendError, match="ended during"):

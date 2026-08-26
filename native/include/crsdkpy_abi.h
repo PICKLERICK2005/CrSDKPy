@@ -45,9 +45,16 @@ extern "C" {
 #endif
 
 /* Bump the major component on any incompatible layout or signature change.
- * Python refuses to load a library whose major version it does not know. */
+ * Python refuses to load a library whose major version it does not know.
+ *
+ * Bump the minor component on any *additive* change to this surface -- a new
+ * exported function, struct, status code or constant -- even though existing
+ * layouts are untouched. The minor is what tells a newer Python that an older
+ * bridge cannot serve everything it is going to call, so a stale library is
+ * refused at load rather than at the first call into the part that is
+ * missing. */
 #define CRSDKPY_ABI_VERSION_MAJOR 1
-#define CRSDKPY_ABI_VERSION_MINOR 4
+#define CRSDKPY_ABI_VERSION_MINOR 5
 
 /* ---- status codes ---------------------------------------------------- */
 #define CRSDKPY_OK                    0

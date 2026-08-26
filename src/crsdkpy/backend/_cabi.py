@@ -55,7 +55,7 @@ __all__ = [
 ]
 
 ABI_VERSION_MAJOR = 1
-ABI_VERSION_MINOR = 4
+ABI_VERSION_MINOR = 5
 
 #: Environment variable holding an explicit path to the built bridge.
 LIBRARY_ENV_VAR = "CRSDKPY_BRIDGE"
@@ -485,8 +485,13 @@ def load_bridge(path: Optional[str] = None) -> ctypes.CDLL:
             operation="native.load",
         ) from exc
 
-    _declare(lib)
-
+    # The version query is declared on its own and checked before anything
+    # else, because declaring a symbol the library does not export raises a
+    # bare AttributeError naming a C function -- which tells a caller nothing
+    # about what is actually wrong or what to do about it. Version first, then
+    # the surface that version is what guarantees.
+    lib.crsdkpy_abi_version.restype = c_int32
+    lib.crsdkpy_abi_version.argtypes = []
     version = lib.crsdkpy_abi_version()
     major = (version >> 16) & 0xFFFF
     minor = version & 0xFFFF
@@ -497,6 +502,20 @@ def load_bridge(path: Optional[str] = None) -> ctypes.CDLL:
             "Rebuild the bridge from this checkout.",
             operation="native.load",
         )
+    # A newer bridge is fine: the minor only ever grows by addition, so it
+    # still exports everything this build calls. An older one does not, and
+    # saying so here is the difference between one clear failure at load and a
+    # surprise at the first call into whatever is missing.
+    if minor < ABI_VERSION_MINOR:
+        raise NativeBackendError(
+            f"Native bridge is older than this CrSDKPy: library reports ABI "
+            f"{major}.{minor}, this build calls operations added in "
+            f"{ABI_VERSION_MAJOR}.{ABI_VERSION_MINOR}. "
+            "Rebuild the bridge from this checkout.",
+            operation="native.load",
+        )
+
+    _declare(lib)
     return lib
 
 

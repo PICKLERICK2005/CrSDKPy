@@ -14,6 +14,9 @@ Run as ``python fake_host.py [behaviour]``. Behaviours:
     adapter_failure   init succeeds, enumeration fails with the adaptor code
     bad_protocol      acknowledges with an incompatible protocol major
     bad_abi           acknowledges with an incompatible C ABI major
+    old_protocol      acknowledges with an older protocol minor, as a host
+                      built before the newest operations were added would
+    old_abi           acknowledges with an older C ABI minor, likewise
     die_on_hello      exits before completing the handshake
     garbage           emits bytes that are not a valid frame
     stale_preview     answers a preview request for the previous still
@@ -851,13 +854,24 @@ def main() -> int:
         if message_type == _ipc.MSG_HELLO:
             if BEHAVIOUR == "die_on_hello":
                 return 91
+            # A real host reports the versions it was compiled against, so the
+            # stand-in reports this checkout's -- otherwise the minor checks
+            # would be untestable in the direction that matters.
             ack = _ipc.HelloAckStruct(
                 protocol_major=(
                     99 if BEHAVIOUR == "bad_protocol" else _ipc.VERSION_MAJOR
                 ),
-                protocol_minor=_ipc.VERSION_MINOR,
+                protocol_minor=(
+                    _ipc.VERSION_MINOR - 1
+                    if BEHAVIOUR == "old_protocol"
+                    else _ipc.VERSION_MINOR
+                ),
                 abi_major=99 if BEHAVIOUR == "bad_abi" else _cabi.ABI_VERSION_MAJOR,
-                abi_minor=0,
+                abi_minor=(
+                    _cabi.ABI_VERSION_MINOR - 1
+                    if BEHAVIOUR == "old_abi"
+                    else _cabi.ABI_VERSION_MINOR
+                ),
                 host_version=(1 << 16),
                 sdk_available=0 if BEHAVIOUR == "sdk_missing" else 1,
                 host_build=b"fake_host",
