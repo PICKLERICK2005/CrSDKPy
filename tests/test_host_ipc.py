@@ -1089,3 +1089,50 @@ def test_a_property_advertising_nothing_stays_unconstrained() -> None:
         assert "values_undecoded" not in prop.metadata
     finally:
         backend.shutdown()
+
+
+# -- lens and framing over the wire -----------------------------------------
+def test_lens_information_round_trips_over_ipc() -> None:
+    """The vendor's list never crosses the boundary; its rows do, as POD."""
+    backend = make_backend()
+    backend.start()
+    try:
+        session = backend.open_session("FAKE-CAM:0000", crsdkpy.SessionMode.REMOTE)
+        backend.request_lens_information(session)
+        rows = backend.get_lens_information(session)
+        assert len(rows) == 6
+        assert {row.info_type for row in rows} == {1, 2}
+        assert rows[0].normalized_value == 900
+        assert rows[0].focus_position == 50
+        assert all(row.data_version == 1 for row in rows)
+    finally:
+        backend.shutdown()
+
+
+def test_a_lens_read_without_a_request_is_refused_over_ipc() -> None:
+    backend = make_backend()
+    backend.start()
+    try:
+        session = backend.open_session("FAKE-CAM:0000", crsdkpy.SessionMode.REMOTE)
+        with pytest.raises(crsdkpy.UnsupportedOperationError):
+            backend.get_lens_information(session)
+        # And the vendor's once-per-request rule survives the transport.
+        backend.request_lens_information(session)
+        assert backend.get_lens_information(session)
+        with pytest.raises(crsdkpy.UnsupportedOperationError):
+            backend.get_lens_information(session)
+    finally:
+        backend.shutdown()
+
+
+def test_the_lens_request_outcome_arrives_as_an_event_over_ipc() -> None:
+    backend = make_backend()
+    backend.start()
+    try:
+        session = backend.open_session("FAKE-CAM:0000", crsdkpy.SessionMode.REMOTE)
+        backend.request_lens_information(session)
+        events = backend.poll_events(session, 500)
+        warnings = [e for e in events if isinstance(e, crsdkpy.WarningEvent)]
+        assert any(e.code == 0x0002003B for e in warnings)
+    finally:
+        backend.shutdown()

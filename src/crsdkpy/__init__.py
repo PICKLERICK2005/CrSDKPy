@@ -86,6 +86,7 @@ from .focus import (
     FocusBracketResult,
     FocusDrivingStatus,
 )
+from .interval import Interval, IntervalStatus
 from .lens import Lens, LensDistance, LensInformationStatus
 from .liveview import LiveView, LiveViewStats, LiveViewStatus
 from .previews import LiveViewFrame, Preview
@@ -98,10 +99,17 @@ from .properties import (
 )
 from .sdk import SDK
 from .session import Session
-from .settings import Drive, Exposure, Setting, WhiteBalance
+from .settings import Drive, Exposure, Setting, StillTransfer, WhiteBalance
 from .status import BatteryStatus, StorageSlot
 from .transfers import ContentDownload
 from .video import Recording, Video
+from .zoom import (
+    Zoom,
+    ZoomBarInformation,
+    ZoomDrivingStatus,
+    ZoomOperationStatus,
+    ZoomTypeStatus,
+)
 
 __all__ = [
     "__version__",
@@ -155,9 +163,17 @@ __all__ = [
     "Lens",
     "LensDistance",
     "LensInformationStatus",
+    "Zoom",
+    "ZoomBarInformation",
+    "ZoomDrivingStatus",
+    "ZoomOperationStatus",
+    "ZoomTypeStatus",
+    "Interval",
+    "IntervalStatus",
     "Exposure",
     "WhiteBalance",
     "Drive",
+    "StillTransfer",
     # imaging
     "LiveView",
     "LiveViewFrame",

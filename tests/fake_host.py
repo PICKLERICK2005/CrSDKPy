@@ -115,6 +115,10 @@ STATE = {
         0x075F: 0,       # LensVersionNumber
         0x07CB: 0,       # LensSerialNumber
         0x0756: 1,       # LensInformationEnableStatus, Enable
+        0x071E: 1,       # Zoom_Operation_Status, Enable
+        0x0505: 1,       # Interval_Rec_Mode, Off
+        0x0718: 1,       # Interval_Rec_Status, waiting start
+        0x0506: 1,       # Still_Image_Trans_Size, SmallSize
     },
     "af_outcome": "focus",
     "mode": 0,             # control mode of the open session

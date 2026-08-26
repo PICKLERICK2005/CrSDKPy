@@ -10,7 +10,20 @@ from .properties import Property, PropertyCode, PropertyRange
 if TYPE_CHECKING:  # pragma: no cover
     from .session import Session
 
-__all__ = ["Drive", "Exposure", "Setting", "WhiteBalance"]
+__all__ = [
+    "STILL_TRANSFER_ORIGINAL",
+    "STILL_TRANSFER_SMALL",
+    "Drive",
+    "Exposure",
+    "Setting",
+    "StillTransfer",
+    "WhiteBalance",
+]
+
+#: Documented CrPropertyStillImageTransSize values. Original is the
+#: captured file; SmallSize is the vendor's "Small Size JPEG/HEIF".
+STILL_TRANSFER_ORIGINAL = 0
+STILL_TRANSFER_SMALL = 1
 
 
 class Setting:
@@ -123,3 +136,31 @@ class Drive:
 
     def __init__(self, session: Session) -> None:
         self.mode = Setting(session, 0x010E)
+
+
+class StillTransfer:
+    """What a host-bound still is transferred as.
+
+    The vendor documents two values: ``Original`` (0) and ``SmallSize`` (1,
+    "Small Size JPEG/HEIF"). The reference body reported SmallSize, which is
+    why a host-bound capture arrived downscaled rather than as the captured
+    file. Whether that body honours ``Original`` has not been tested on
+    hardware, so this exposes the setting and claims nothing about the result.
+    """
+
+    def __init__(self, session: Session) -> None:
+        self.size = Setting(session, 0x0506)
+
+    @property
+    def is_original(self) -> Optional[bool]:
+        """True/False for the documented values, ``None`` otherwise.
+
+        ``None`` also covers a camera that does not expose the setting, since
+        an absent setting says nothing about what will be delivered.
+        """
+        value = self.size.value
+        if value == STILL_TRANSFER_ORIGINAL:
+            return True
+        if value == STILL_TRANSFER_SMALL:
+            return False
+        return None

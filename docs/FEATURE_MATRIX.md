@@ -38,6 +38,11 @@ architecture rather than adding a second backend.
 | Unknown numeric property codes | yes | yes | **yes** |
 | Property writes (typed, read-modify-write) | yes | yes | **yes** ² |
 | Typed exposure / white-balance / drive settings | yes | yes | no |
+| Lens identity (model, version, serial) | yes | yes | **yes** ¹² |
+| Lens focus-distance table (request / read / release) | yes | yes | no ¹³ |
+| Zoom state, drive and absolute position | yes | yes | no ¹⁴ |
+| Interval (still) shooting settings and status | yes | yes | no |
+| Still transfer size (Original / SmallSize) | yes | yes | no ¹⁵ |
 | Event stream | yes | yes | **yes** |
 | Generic commands | yes | yes | **yes** |
 | MF still capture, judged on the exposure event | yes | yes | **yes** ³ |
@@ -114,6 +119,31 @@ while the camera is still building its index, then succeed on the next call.
 Reproduced in three of four consecutive sessions. It reports as
 `CameraBusyError`, not as a connection error, so a caller does not tear down a
 healthy session over it.
+
+¹² Read on the reference body: `LensModelName` returned `FE 50mm F1.4 GM` and
+`LensVersionNumber` returned `01`, both through the string accessor. Identity
+needs no request; it is three ordinary string properties.
+
+¹³ The documented precondition was never met. `LensInformationEnableStatus`
+read **Disable** with the FE 50mm F1.4 GM attached, and `GetLensInformation`
+returned `CrError_Api_NoApplicableInformation` with a count of zero both before
+and after a request that itself reported success. The reading is that this lens
+carries no focus-distance data — a lens limitation, not a body or API one. A
+lens that reports Enable is needed to exercise the family, and none has been
+available, so every part of the request / read / release path is
+simulator-covered only.
+
+¹⁴ The zoom family is exposed on the reference body — operation status,
+absolute position, scale, distance, driving status and speed range were all
+readable — but the attached prime cannot motorise anything, so no drive and no
+absolute move has ever been executed. Exposure of the family is hardware fact;
+motion is not.
+
+¹⁵ Measured at `SmallSize` (1) on the reference body, which is why a host-bound
+capture arrived as a 1616x1080 JPEG rather than the 4240x2832 original. The
+property reports itself writable. Setting it to `Original` (0) and repeating
+the capture is **untested** — the hardware window closed first — so no claim is
+made about whether the body honours it.
 
 ## Known vendor behaviour worth knowing about
 

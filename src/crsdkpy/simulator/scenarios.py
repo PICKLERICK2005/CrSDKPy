@@ -125,6 +125,13 @@ class Scenario:
     #: Withhold the request outcome entirely, so the wait has to time out.
     lens_request_silent: bool = False
 
+    # -- zoom --------------------------------------------------------------
+    #: What the camera reports for Zoom_Operation_Status. A body can expose the
+    #: whole zoom family and still refuse to drive it, which is what a prime
+    #: lens on the reference body looked like.
+    zoom_operation_enabled: bool = True
+
+
     def replace(self, **changes: object) -> Scenario:
         """Return a copy with *changes* applied."""
         return replace(self, **changes)  # type: ignore[arg-type]
@@ -155,6 +162,7 @@ SCENARIOS: dict[str, Scenario] = {
             lens_information_enabled=True,
             lens_distance_rows=6,
         ),
+        Scenario(name="zoom_not_operable", zoom_operation_enabled=False),
         Scenario(
             name="lens_request_refused",
             lens_information_enabled=True,

@@ -42,14 +42,16 @@ from .events import (
     FocusSource,
 )
 from .focus import Focus
+from .interval import Interval
 from .lens import Lens
 from .liveview import LiveView
 from .previews import Preview
 from .properties import Property, PropertyCode, PropertySnapshot
 from .raw import RawAccess
-from .settings import Drive, Exposure, WhiteBalance
+from .settings import Drive, Exposure, StillTransfer, WhiteBalance
 from .status import BatteryStatus, StorageSlot
 from .video import Video
+from .zoom import Zoom
 
 if TYPE_CHECKING:  # pragma: no cover
     from .backend.contract import Backend
@@ -155,12 +157,15 @@ class Session:
         self.content = Content(self)
         self.focus = Focus(self)
         self.lens = Lens(self)
+        self.zoom = Zoom(self)
+        self.interval = Interval(self)
         self.live_view = LiveView(self)
         self.video = Video(self)
         self.raw = RawAccess(self)
         self.exposure = Exposure(self)
         self.white_balance = WhiteBalance(self)
         self.drive = Drive(self)
+        self.still_transfer = StillTransfer(self)
 
         self._pump(timeout_ms=0)
         self._state = backend.connection_state(session_id)

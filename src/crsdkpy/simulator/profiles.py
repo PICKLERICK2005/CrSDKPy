@@ -75,6 +75,32 @@ CODE_LENS_VERSION_NUMBER = 0x075F
 CODE_LENS_SERIAL_NUMBER = 0x07CB
 CODE_LENS_INFORMATION_ENABLE_STATUS = 0x0756
 
+# Zoom. Every documented control is a property; none of it is an operation.
+CODE_ZOOM_SCALE = 0x0124
+CODE_ZOOM_SETTING = 0x0125
+CODE_ZOOM_OPERATION = 0x0126
+CODE_ZOOM_POSITION_SETTING = 0x02BC
+CODE_REMOCON_ZOOM_SPEED_TYPE = 0x050C
+CODE_ZOOM_OPERATION_STATUS = 0x071E
+CODE_ZOOM_BAR_INFORMATION = 0x071F
+CODE_ZOOM_TYPE_STATUS = 0x0720
+CODE_ZOOM_SPEED_RANGE = 0x0724
+CODE_ZOOM_DRIVING_STATUS = 0x0792
+CODE_ZOOM_POSITION_CURRENT_VALUE = 0x07A1
+
+
+# Interval (still) shooting. The camera owns the sequence.
+CODE_INTERVAL_START_TIME = 0x01FC
+CODE_INTERVAL_SHOOTING_INTERVAL = 0x01FD
+CODE_INTERVAL_PRIORITY = 0x01FE
+CODE_INTERVAL_NUMBER_OF_SHOTS = 0x01FF
+CODE_INTERVAL_AE_TRACKING = 0x0200
+CODE_INTERVAL_SHUTTER_TYPE = 0x0201
+CODE_INTERVAL_REC_MODE = 0x0505
+CODE_INTERVAL_REC_STATUS = 0x0718
+
+CODE_STILL_IMAGE_TRANS_SIZE = 0x0506
+
 
 @dataclass(frozen=True)
 class Timings:
@@ -233,6 +259,26 @@ def _base_properties() -> tuple[int, ...]:
         CODE_LENS_VERSION_NUMBER,
         CODE_LENS_SERIAL_NUMBER,
         CODE_LENS_INFORMATION_ENABLE_STATUS,
+        CODE_ZOOM_SCALE,
+        CODE_ZOOM_SETTING,
+        CODE_ZOOM_OPERATION,
+        CODE_ZOOM_POSITION_SETTING,
+        CODE_REMOCON_ZOOM_SPEED_TYPE,
+        CODE_ZOOM_OPERATION_STATUS,
+        CODE_ZOOM_BAR_INFORMATION,
+        CODE_ZOOM_TYPE_STATUS,
+        CODE_ZOOM_SPEED_RANGE,
+        CODE_ZOOM_DRIVING_STATUS,
+        CODE_ZOOM_POSITION_CURRENT_VALUE,
+        CODE_INTERVAL_START_TIME,
+        CODE_INTERVAL_SHOOTING_INTERVAL,
+        CODE_INTERVAL_PRIORITY,
+        CODE_INTERVAL_NUMBER_OF_SHOTS,
+        CODE_INTERVAL_AE_TRACKING,
+        CODE_INTERVAL_SHUTTER_TYPE,
+        CODE_INTERVAL_REC_MODE,
+        CODE_INTERVAL_REC_STATUS,
+        CODE_STILL_IMAGE_TRANS_SIZE,
     )
 
 
@@ -244,8 +290,15 @@ def build_property(code: int, value: object) -> Property:
                 CODE_SYSTEM_CAUTION, CODE_FOCUS_POSITION_CURRENT,
                 CODE_FOCUS_DRIVING_STATUS, CODE_LENS_MODEL_NAME,
                 CODE_LENS_VERSION_NUMBER, CODE_LENS_SERIAL_NUMBER,
-                CODE_LENS_INFORMATION_ENABLE_STATUS):
+                CODE_LENS_INFORMATION_ENABLE_STATUS,
+                CODE_ZOOM_OPERATION_STATUS, CODE_ZOOM_TYPE_STATUS,
+                CODE_ZOOM_SPEED_RANGE, CODE_ZOOM_DRIVING_STATUS,
+                CODE_ZOOM_BAR_INFORMATION, CODE_ZOOM_POSITION_CURRENT_VALUE,
+                CODE_INTERVAL_REC_STATUS):
         access = PropertyAccess.READ_ONLY
+    # The zoom drive is a write-only property on the reference body.
+    if code == CODE_ZOOM_OPERATION:
+        access = PropertyAccess.WRITE_ONLY
     if code == CODE_S1:
         allowed = (LOCK_UNLOCKED, LOCK_LOCKED)
     if code == CODE_FOCUS_MODE:
@@ -268,8 +321,37 @@ def build_property(code: int, value: object) -> Property:
         value_range = PropertyRange(0, 65535, 1)
     if code == CODE_EXPOSURE_COMPENSATION:
         value_range = PropertyRange(-3000, 3000, 1000)
+    if code in (CODE_ZOOM_POSITION_SETTING, CODE_ZOOM_POSITION_CURRENT_VALUE):
+        value_range = PropertyRange(0, 65535, 1)
+    if code == CODE_ZOOM_SCALE:
+        # Units of 0.001, so this body spans x1.0 to x8.0 in 0.2 steps.
+        value_range = PropertyRange(1000, 8000, 200)
+    if code in (CODE_ZOOM_OPERATION, CODE_ZOOM_SPEED_RANGE):
+        # A body with a variable speed range; the documented floor is -1..1.
+        value_range = PropertyRange(-8, 8, 1)
+    if code == CODE_INTERVAL_SHOOTING_INTERVAL:
+        # Ten times the interval in seconds, so 1.0s to 60.0s in 0.1s steps.
+        value_range = PropertyRange(10, 600, 1)
+    if code == CODE_INTERVAL_START_TIME:
+        value_range = PropertyRange(1, 6553, 1)
+    if code == CODE_INTERVAL_NUMBER_OF_SHOTS:
+        value_range = PropertyRange(1, 9999, 1)
     if code == CODE_LENS_INFORMATION_ENABLE_STATUS:
         allowed = (0, 1)
+    if code == CODE_ZOOM_SETTING:
+        allowed = (1, 2, 3, 4)
+    if code == CODE_REMOCON_ZOOM_SPEED_TYPE:
+        allowed = (0, 1, 2)
+    if code == CODE_STILL_IMAGE_TRANS_SIZE:
+        allowed = (0, 1)
+    if code == CODE_INTERVAL_REC_MODE:
+        allowed = (1, 2)
+    if code == CODE_INTERVAL_PRIORITY:
+        allowed = (1, 2)
+    if code == CODE_INTERVAL_AE_TRACKING:
+        allowed = (1, 2, 3, 4)
+    if code == CODE_INTERVAL_SHUTTER_TYPE:
+        allowed = (1, 2, 3)
     # Lens identity answers through the string accessor, as on real hardware.
     if code in (CODE_LENS_MODEL_NAME, CODE_LENS_VERSION_NUMBER,
                 CODE_LENS_SERIAL_NUMBER):

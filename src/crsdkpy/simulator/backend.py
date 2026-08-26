@@ -139,6 +139,9 @@ class _Session:
         self.properties[P.CODE_LENS_INFORMATION_ENABLE_STATUS] = (
             1 if scenario.lens_information_enabled else 0
         )
+        self.properties[P.CODE_ZOOM_OPERATION_STATUS] = (
+            1 if scenario.zoom_operation_enabled else 0
+        )
         for code in scenario.unavailable_property_codes:
             self.properties.pop(code, None)
         for code, value in scenario.property_value_overrides:
@@ -212,6 +215,42 @@ class _Session:
             return "02"
         if code == P.CODE_LENS_SERIAL_NUMBER:
             return "SIMLENS0001"
+        if code == P.CODE_ZOOM_OPERATION_STATUS:
+            return 1                       # Enable
+        if code == P.CODE_ZOOM_TYPE_STATUS:
+            return 1                       # Optical
+        if code == P.CODE_ZOOM_DRIVING_STATUS:
+            return 1                       # Not driving
+        if code == P.CODE_ZOOM_SETTING:
+            return 1                       # Optical zoom only
+        if code == P.CODE_ZOOM_SCALE:
+            return 1000                    # x1.0
+        if code == P.CODE_REMOCON_ZOOM_SPEED_TYPE:
+            return 1                       # Variable
+        if code == P.CODE_ZOOM_BAR_INFORMATION:
+            # 8 boxes, currently box 2, 50 of 100 through it.
+            return (8 << 24) | (2 << 16) | 50
+        if code in (P.CODE_ZOOM_POSITION_SETTING,
+                    P.CODE_ZOOM_POSITION_CURRENT_VALUE):
+            return 16_384
+        if code == P.CODE_INTERVAL_REC_MODE:
+            return 1                       # Off
+        if code == P.CODE_INTERVAL_REC_STATUS:
+            return 1                       # Waiting start
+        if code == P.CODE_INTERVAL_START_TIME:
+            return 3
+        if code == P.CODE_INTERVAL_SHOOTING_INTERVAL:
+            return 300                     # ten times 30 seconds
+        if code == P.CODE_INTERVAL_NUMBER_OF_SHOTS:
+            return 30
+        if code in (P.CODE_INTERVAL_PRIORITY, P.CODE_INTERVAL_SHUTTER_TYPE):
+            return 1
+        if code == P.CODE_INTERVAL_AE_TRACKING:
+            return 1
+        if code == P.CODE_STILL_IMAGE_TRANS_SIZE:
+            # SmallSize, which is what the reference body reported and why a
+            # host-bound still arrived downscaled.
+            return 1
         return 0
 
     # -- scheduling --------------------------------------------------------
@@ -570,6 +609,36 @@ class SimulatedBackend(Backend):
                 self._cancel_autofocus(session)
         elif key == P.CODE_FOCUS_POSITION_SETTING:
             self._begin_focus_move(session, int(value))
+        elif key == P.CODE_ZOOM_POSITION_SETTING:
+            self._begin_zoom_move(session, int(value))
+
+    def _begin_zoom_move(self, session: _Session, target: int) -> None:
+        """An absolute zoom move, which is the only motion the camera reports.
+
+        The vendor documents ZoomDrivingStatus as reflecting this and a preset
+        load, and nothing else -- a speed-driven zoom leaves it alone.
+        """
+        current = int(session.properties[P.CODE_ZOOM_POSITION_CURRENT_VALUE])
+        if current == target:
+            session.properties[P.CODE_ZOOM_DRIVING_STATUS] = 1
+            return
+        session.properties[P.CODE_ZOOM_DRIVING_STATUS] = 2
+        now = self._clock.now_ms()
+
+        def _settled() -> Sequence[Event]:
+            session.properties[P.CODE_ZOOM_POSITION_CURRENT_VALUE] = target
+            session.properties[P.CODE_ZOOM_DRIVING_STATUS] = 1
+            return (
+                PropertyChangedEvent(
+                    timestamp_ms=self._clock.now_ms(),
+                    codes=(
+                        PropertyCode(P.CODE_ZOOM_POSITION_CURRENT_VALUE),
+                        PropertyCode(P.CODE_ZOOM_DRIVING_STATUS),
+                    ),
+                ),
+            )
+
+        session.schedule(now + session.profile.timings.focus_confirm, _settled)
 
     def _begin_focus_move(self, session: _Session, target: int) -> None:
         session.focus_moves_started += 1

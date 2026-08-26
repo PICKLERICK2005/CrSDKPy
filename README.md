@@ -227,6 +227,87 @@ settings accept, and the vendor asks for 500 ms after that write before setting
 a shooting parameter such as `shutter_speed`. A write is asynchronous — the
 camera reports the new value through the event stream, not through `set()`.
 
+### Lens
+
+Identity is three ordinary string properties and needs no request:
+
+```python
+session.lens.model_name      # 'FE 50mm F1.4 GM'
+session.lens.version         # '01'
+session.lens.serial_number
+```
+
+The lens's focus-distance table is a separate feature with its own protocol.
+The vendor allows the request only while the camera reports the precondition,
+reports the outcome as a warning and nowhere else, and permits one read per
+request. `load_information()` does the whole documented sequence:
+
+```python
+if session.lens.information_available:          # the camera's own enable flag
+    for row in session.lens.load_information():
+        row.unit                                 # 'meter' | 'feet' | None
+        row.normalized_value                     # matches the follow-focus value
+        row.focus_position                       # distance, in the camera's units
+```
+
+A lens that carries no distance data raises `UnsupportedOperationError` — the
+vendor reports the same status for that and for a read with no successful
+request behind it, so the message says both. That is a lens limitation, not a
+body or API one.
+
+### Zoom
+
+Every documented zoom control is a property, so support is a runtime question
+the camera answers. A body can expose the whole family with a lens that cannot
+motorise anything:
+
+```python
+session.zoom.available          # the camera exposes the family
+session.zoom.operable           # a drive would meet its precondition now
+session.zoom.type_status.name   # 'optical' | 'smart' | 'clear_image' | 'digital'
+session.zoom.speed_range        # what a drive will accept, per body
+
+session.zoom.operate(1)         # tele; negative is wide
+session.zoom.stop()
+session.zoom.move_to(20_000)    # absolute; watch session.zoom.is_driving
+```
+
+A drive is refused when the camera does not currently allow one, rather than
+sent for the camera to ignore. Scale, digital scale and focal distance stay in
+the camera's own units: `scale` counts in thousandths, so `1200` is x1.2.
+
+### Interval shooting
+
+The camera owns the sequence. There is no start or stop operation in the vendor
+SDK and no scheduler here — arming is a property write and progress is a
+read-only status the camera updates:
+
+```python
+session.interval.number_of_shots.set(120)
+session.interval.shooting_interval.value_range   # what this body accepts
+session.interval.enable()
+session.interval.status.name                     # 'waiting_start' | 'shooting'
+```
+
+Values stay in the camera's units. The vendor documents the shooting interval
+as ten times the value in seconds, so `300` is 30 s; it describes the start
+time as seconds while giving a maximum that only holds at a tenth of a second,
+so that one is genuinely ambiguous and is left exactly as reported.
+
+### Still transfer size
+
+What a host-bound still is delivered as:
+
+```python
+session.still_transfer.size.value      # 0 Original, 1 SmallSize
+session.still_transfer.is_original     # True | False | None
+```
+
+The reference body reported `SmallSize`, which is why a host-bound capture
+arrived downscaled rather than as the captured file. Whether that body honours
+`Original` has not been tested on hardware, so this exposes the setting and
+claims nothing about the result.
+
 ### Raw escape hatch
 
 Vendor features CrSDKPy has not modelled stay reachable, including property
@@ -280,14 +361,14 @@ process also means a native fault reports as a backend error instead of taking
 the interpreter with it.
 
 `backend="native"` loads the same bridge in process instead. It is lower level,
-useful for diagnosis, and subject to the adapter constraint above — which is
+useful for diagnosis, and subject to the adapter constraint above, which is
 why the hosted backend is the supported path. See
 [`native/README.md`](native/README.md).
 
 ## Integrating
 
 [`docs/INTEGRATION_CONTRACT.md`](docs/INTEGRATION_CONTRACT.md) states the
-surface an application should bind to, and — more usefully — the vendor
+surface an application should bind to, and, more usefully, the vendor
 machinery it must never need: no S1 or S2, no command enumerations, no control
 mode internals, no native handles, no IPC.
 
