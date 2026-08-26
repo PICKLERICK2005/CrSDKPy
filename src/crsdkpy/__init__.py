@@ -86,6 +86,7 @@ from .focus import (
     FocusBracketResult,
     FocusDrivingStatus,
 )
+from .lens import Lens, LensDistance, LensInformationStatus
 from .liveview import LiveView, LiveViewStats, LiveViewStatus
 from .previews import LiveViewFrame, Preview
 from .properties import (
@@ -151,6 +152,9 @@ __all__ = [
     "FocusBracketFrame",
     "FocusBracketResult",
     "FocusDrivingStatus",
+    "Lens",
+    "LensDistance",
+    "LensInformationStatus",
     "Exposure",
     "WhiteBalance",
     "Drive",

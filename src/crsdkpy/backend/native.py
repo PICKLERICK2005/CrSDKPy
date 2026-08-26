@@ -66,7 +66,13 @@ from ..previews import LiveViewFrame, Preview
 from ..properties import Property, PropertyCode
 from ..status import BatteryStatus, StorageSlot
 from . import _cabi
-from .contract import Backend, BackendCameraInfo, ContentRef, LiveViewInfo
+from .contract import (
+    Backend,
+    BackendCameraInfo,
+    ContentRef,
+    LensDistanceRow,
+    LiveViewInfo,
+)
 
 __all__ = ["NativeBackend", "native_backend_available"]
 
@@ -885,6 +891,31 @@ def decode_property(raw: _cabi.PropertyStruct) -> Property:
     )
 
 
+def decode_lens_row(raw: _cabi.LensInfoStruct) -> LensDistanceRow:
+    return LensDistanceRow(
+        info_type=int(raw.info_type),
+        data_version=int(raw.data_version),
+        normalized_value=int(raw.normalized_value),
+        focus_position=int(raw.focus_position),
+    )
+
+
+def no_applicable_lens_information() -> UnsupportedOperationError:
+    """The single answer the vendor gives for two different situations.
+
+    It reports the same status for a lens that carries no focus-distance data
+    and for a read with no successful request behind it, so the message says
+    both rather than picking one.
+    """
+    return UnsupportedOperationError(
+        "the camera reports no applicable lens information; either the "
+        "attached lens carries no focus-distance data or no lens-information "
+        "request has succeeded yet",
+        capability="lens.information",
+        operation="lens.read_information",
+    )
+
+
 class NativeBackend(
     ShutterStageMixin,
     DeviceStatusMixin,
@@ -1128,6 +1159,37 @@ class NativeBackend(
             self._lib.crsdkpy_set_property(handle, int(code), int(value)),
             "set_property",
         )
+
+    # -- lens --------------------------------------------------------------
+    def request_lens_information(self, session_id: str) -> None:
+        handle = self._handle(session_id, "request_lens_information")
+        _cabi.check(
+            self._lib,
+            self._lib.crsdkpy_request_lens_information(handle),
+            "request_lens_information",
+        )
+
+    def get_lens_information(self, session_id: str) -> Sequence[LensDistanceRow]:
+        handle = self._handle(session_id, "get_lens_information")
+        count = ctypes.c_uint32(0)
+        status = self._lib.crsdkpy_get_lens_information(
+            handle, None, 0, ctypes.byref(count)
+        )
+        if status == _cabi.ERR_NOT_FOUND:
+            raise no_applicable_lens_information()
+        _cabi.check(self._lib, status, "get_lens_information")
+        if count.value == 0:
+            raise no_applicable_lens_information()
+        buffer = (_cabi.LensInfoStruct * count.value)()
+        produced = ctypes.c_uint32(0)
+        _cabi.check(
+            self._lib,
+            self._lib.crsdkpy_get_lens_information(
+                handle, buffer, count.value, ctypes.byref(produced)
+            ),
+            "get_lens_information",
+        )
+        return [decode_lens_row(buffer[i]) for i in range(produced.value)]
 
     def send_command(self, session_id: str, command: Any, parameter: Any) -> None:
         handle = self._handle(session_id, "send_command")

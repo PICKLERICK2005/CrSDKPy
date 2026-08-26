@@ -78,6 +78,8 @@ STATE = {
         0x079F: "0000000000",
         0x0751: "9.99",
         0x0765: "SIM 100mm F2.0",
+        0x075F: "03",
+        0x07CB: "FAKELENS42",
     },
     "next_slot": 1,
     "generation": 0,
@@ -110,6 +112,9 @@ STATE = {
         0x079F: 0,       # BodySerialNumber
         0x0751: 0,       # SoftwareVersion
         0x0765: 0,       # LensModelName
+        0x075F: 0,       # LensVersionNumber
+        0x07CB: 0,       # LensSerialNumber
+        0x0756: 1,       # LensInformationEnableStatus, Enable
     },
     "af_outcome": "focus",
     "mode": 0,             # control mode of the open session
@@ -123,6 +128,9 @@ STATE = {
     "transfer_active": False,
     "transfer_terminal": False,
     "transfer_destination": "",
+    # The vendor allows one read of the lens table per request, so the fake
+    # host models that rather than answering an unrequested read.
+    "lens_information_ready": False,
 }
 
 #: Vendor control mode that exposes the content index.
@@ -743,6 +751,36 @@ def handle_request(out, request_id: int, meta: bytes, blob: bytes = b"") -> bool
         else:
             encoded = text.encode("utf-8")
             respond(out, request_id, message=encoded, count=len(encoded))
+        return True
+
+    if op == _ipc.OP_REQUEST_LENS_INFORMATION:
+        STATE["lens_information_ready"] = True
+        STATE["events"].append(
+            make_event(_cabi.EVENT_WARNING, 0x0002003B)
+        )
+        respond(out, request_id)
+        return True
+
+    if op == _ipc.OP_GET_LENS_INFORMATION:
+        if not STATE["lens_information_ready"]:
+            respond(out, request_id, status=-7, category=_ipc.CAT_NOT_FOUND,
+                    message=b"no applicable lens information")
+            return True
+        STATE["lens_information_ready"] = False
+        rows = []
+        for index, (unit, normalized, position) in enumerate((
+            (2, 900, 50), (2, 700, 100), (2, 500, 200),
+            (1, 900, 164), (1, 700, 328), (1, 500, 656),
+        )):
+            row = _cabi.LensInfoStruct()
+            row.info_type = unit
+            row.data_version = 1
+            row.normalized_value = normalized
+            row.focus_position = position
+            rows.append(row)
+        blob = b"".join(bytes(row) for row in rows)
+        respond(out, request_id, count=len(rows), blob=blob,
+                item_size=_cabi.ctypes.sizeof(_cabi.LensInfoStruct))
         return True
 
     if op == _ipc.OP_TEST_CRASH:

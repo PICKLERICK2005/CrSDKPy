@@ -68,6 +68,13 @@ CODE_FOCUS_POSITION_SETTING = 0x020E
 CODE_FOCUS_POSITION_CURRENT = 0x0766
 CODE_FOCUS_DRIVING_STATUS = 0x0767
 
+# Lens identity is three string-valued properties; the focus-distance table is
+# a separate feature gated on the enable status.
+CODE_LENS_MODEL_NAME = 0x0765
+CODE_LENS_VERSION_NUMBER = 0x075F
+CODE_LENS_SERIAL_NUMBER = 0x07CB
+CODE_LENS_INFORMATION_ENABLE_STATUS = 0x0756
+
 
 @dataclass(frozen=True)
 class Timings:
@@ -98,6 +105,8 @@ class Timings:
     reconnect: int = 28_000
     #: A related property arriving after the batch that caused it.
     property_straggler: int = 102
+    #: Request accepted to the vendor reporting its outcome as a warning.
+    request_outcome: int = 120
 
 
 @dataclass(frozen=True)
@@ -220,6 +229,10 @@ def _base_properties() -> tuple[int, ...]:
         CODE_FOCUS_POSITION_SETTING,
         CODE_FOCUS_POSITION_CURRENT,
         CODE_FOCUS_DRIVING_STATUS,
+        CODE_LENS_MODEL_NAME,
+        CODE_LENS_VERSION_NUMBER,
+        CODE_LENS_SERIAL_NUMBER,
+        CODE_LENS_INFORMATION_ENABLE_STATUS,
     )
 
 
@@ -229,7 +242,9 @@ def build_property(code: int, value: object) -> Property:
     allowed: tuple[object, ...] = ()
     if code in (CODE_FOCUS_INDICATION, CODE_RECORDING_STATE, CODE_CAMERA_CAUTION,
                 CODE_SYSTEM_CAUTION, CODE_FOCUS_POSITION_CURRENT,
-                CODE_FOCUS_DRIVING_STATUS):
+                CODE_FOCUS_DRIVING_STATUS, CODE_LENS_MODEL_NAME,
+                CODE_LENS_VERSION_NUMBER, CODE_LENS_SERIAL_NUMBER,
+                CODE_LENS_INFORMATION_ENABLE_STATUS):
         access = PropertyAccess.READ_ONLY
     if code == CODE_S1:
         allowed = (LOCK_UNLOCKED, LOCK_LOCKED)
@@ -253,6 +268,17 @@ def build_property(code: int, value: object) -> Property:
         value_range = PropertyRange(0, 65535, 1)
     if code == CODE_EXPOSURE_COMPENSATION:
         value_range = PropertyRange(-3000, 3000, 1000)
+    if code == CODE_LENS_INFORMATION_ENABLE_STATUS:
+        allowed = (0, 1)
+    # Lens identity answers through the string accessor, as on real hardware.
+    if code in (CODE_LENS_MODEL_NAME, CODE_LENS_VERSION_NUMBER,
+                CODE_LENS_SERIAL_NUMBER):
+        return Property(
+            code=PropertyCode(code),
+            value=value,
+            value_type=PropertyValueType.STRING,
+            access=access,
+        )
     return Property(
         code=PropertyCode(code),
         value=value,

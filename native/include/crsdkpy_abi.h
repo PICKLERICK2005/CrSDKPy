@@ -219,6 +219,19 @@ typedef struct crsdkpy_content {
     char     path[256];
 } crsdkpy_content;
 
+/* One row of the lens's focus-distance table.
+ *
+ * The vendor's own structure, flattened: it maps a follow-focus position onto
+ * a distance in the unit named by info_type. Nothing here is converted --
+ * the reference documents the fields but not a unit scale for focus_position,
+ * so the camera's own numbers travel unchanged. */
+typedef struct crsdkpy_lens_info {
+    uint32_t info_type;        /* vendor CrLensInformationType: 1 feet, 2 meter */
+    uint32_t data_version;
+    uint32_t normalized_value; /* comparable with the follow-focus properties */
+    uint32_t focus_position;
+} crsdkpy_lens_info;
+
 /* Result of one compressed-preview transfer. The bytes themselves are held
  * inside the bridge until crsdkpy_take_content_preview copies them out. */
 typedef struct crsdkpy_preview_info {
@@ -348,6 +361,31 @@ CRSDKPY_API int32_t crsdkpy_start_content_download(
 /* Request documented cancellation of the active file transfer. Idempotent
  * when no transfer is active or it has already reached a terminal callback. */
 CRSDKPY_API int32_t crsdkpy_cancel_content_download(uint64_t handle);
+
+/* Ask the camera to prepare the lens's focus-distance table.
+ *
+ * The vendor documents this as valid only while the camera reports
+ * LensInformationEnableStatus (0x0756) as Enable, and its outcome arrives
+ * later on the warning channel rather than in this return value. The bridge
+ * does not police the precondition -- the camera's own answer is the truth --
+ * but it does forget any table a previous request produced, because the
+ * vendor allows exactly one read per request. */
+CRSDKPY_API int32_t crsdkpy_request_lens_information(uint64_t handle);
+
+/* Copy out the focus-distance table prepared by the last request.
+ *
+ * The vendor's read is once-per-request and hands back a list it owns, so the
+ * bridge performs that read exactly once, copies every row, and releases the
+ * vendor list immediately. Later calls are served from the copy, which is what
+ * makes the ordinary size-then-fill sequence safe here.
+ *
+ * Returns CRSDKPY_ERR_NOT_FOUND when the camera has no applicable information,
+ * which the vendor reports for a lens that carries no distance data as well as
+ * for a read with no successful request behind it. */
+CRSDKPY_API int32_t crsdkpy_get_lens_information(uint64_t handle,
+                                                 crsdkpy_lens_info* out,
+                                                 uint32_t capacity,
+                                                 uint32_t* out_count);
 
 /* Initialise the vendor SDK. Idempotent per process.
  *

@@ -797,6 +797,46 @@ public:
         return true;
     }
 
+    // The vendor allows exactly one read of the lens table per request and
+    // hands back a list it owns. So the read happens once, here, and what the
+    // caller sees afterwards is this copy. Requesting again discards it,
+    // because a new request is what makes a new read legal.
+    void forget_lens_information()
+    {
+        std::lock_guard<std::mutex> lock(lens_mutex_);
+        lens_info_.clear();
+        lens_info_read_ = false;
+    }
+
+    // Returns the vendor status of the one read it may have performed.
+    int32_t lens_information(std::vector<crsdkpy_lens_info>* out)
+    {
+        std::lock_guard<std::mutex> lock(lens_mutex_);
+        if (!lens_info_read_) {
+            SDK::CrLensInformation* list = nullptr;
+            CrInt32u count = 0;
+            const auto error = SDK::GetLensInformation(handle_, &list, &count);
+            if (list) {
+                for (CrInt32u i = 0; i < count; ++i) {
+                    crsdkpy_lens_info row;
+                    std::memset(&row, 0, sizeof(row));
+                    row.info_type = static_cast<uint32_t>(list[i].type);
+                    row.data_version = list[i].dataVersion;
+                    row.normalized_value = list[i].normalizedValue;
+                    row.focus_position = list[i].focusPosition;
+                    lens_info_.push_back(row);
+                }
+                SDK::ReleaseLensInformation(handle_, list);
+            }
+            if (error != SDK::CrError_None && lens_info_.empty()) {
+                return static_cast<int32_t>(error);
+            }
+            lens_info_read_ = true;
+        }
+        if (out) *out = lens_info_;
+        return CRSDKPY_OK;
+    }
+
     void note_property_activity() { last_property_ms_.store(now_ms()); }
     int64_t last_property_ms() const { return last_property_ms_.load(); }
 
@@ -860,6 +900,10 @@ private:
     std::string transfer_path_;
     bool file_transfer_active_ = false;
     bool file_transfer_terminal_ = false;
+
+    std::mutex lens_mutex_;
+    std::vector<crsdkpy_lens_info> lens_info_;
+    bool lens_info_read_ = false;
 
     std::mutex postview_mutex_;
     PostviewPending postview_;
@@ -1584,6 +1628,61 @@ int32_t crsdkpy_set_property(uint64_t handle, uint32_t code, int64_t value)
         set_error("the camera rejected the property write");
         return static_cast<int32_t>(error);
     }
+    return CRSDKPY_OK;
+}
+
+int32_t crsdkpy_request_lens_information(uint64_t handle)
+{
+    set_error("");
+    std::lock_guard<std::mutex> lock(g_mutex);
+    auto session = resolve(handle);
+    if (!session) return CRSDKPY_ERR_INVALID_HANDLE;
+    if (session->state() != CRSDKPY_STATE_CONNECTED) return CRSDKPY_ERR_NOT_CONNECTED;
+
+    // Drop whatever the previous request produced first: if the vendor accepts
+    // this one, the old table is stale, and if it refuses, serving the old one
+    // as though it were fresh would be worse than having none.
+    session->forget_lens_information();
+    const auto error = SDK::RequestLensInformation(session->handle());
+    if (error != SDK::CrError_None) {
+        set_error("the camera refused the lens-information request");
+        return static_cast<int32_t>(error);
+    }
+    return CRSDKPY_OK;
+}
+
+int32_t crsdkpy_get_lens_information(uint64_t handle, crsdkpy_lens_info* out,
+                                     uint32_t capacity, uint32_t* out_count)
+{
+    set_error("");
+    if (!out_count) return CRSDKPY_ERR_INVALID_ARG;
+    *out_count = 0;
+    if (capacity > 0 && !out) return CRSDKPY_ERR_INVALID_ARG;
+
+    std::lock_guard<std::mutex> lock(g_mutex);
+    auto session = resolve(handle);
+    if (!session) return CRSDKPY_ERR_INVALID_HANDLE;
+    if (session->state() != CRSDKPY_STATE_CONNECTED) return CRSDKPY_ERR_NOT_CONNECTED;
+
+    std::vector<crsdkpy_lens_info> rows;
+    const int32_t status = session->lens_information(&rows);
+    // The vendor reports one status for two situations it does not separate:
+    // no lens-information-capable lens, and no successful request behind the
+    // read. Neither is a failure of this call, so both surface as "nothing".
+    if (status == static_cast<int32_t>(SDK::CrError_Api_NoApplicableInformation)) {
+        set_error("the camera reports no applicable lens information");
+        return CRSDKPY_ERR_NOT_FOUND;
+    }
+    if (status != CRSDKPY_OK) return status;
+    if (rows.empty()) {
+        set_error("the camera reports no applicable lens information");
+        return CRSDKPY_ERR_NOT_FOUND;
+    }
+
+    *out_count = static_cast<uint32_t>(rows.size());
+    if (capacity == 0) return CRSDKPY_OK;  // sizing call
+    if (rows.size() > capacity) return CRSDKPY_ERR_BUFFER_TOO_SMALL;
+    for (size_t i = 0; i < rows.size(); ++i) out[i] = rows[i];
     return CRSDKPY_OK;
 }
 

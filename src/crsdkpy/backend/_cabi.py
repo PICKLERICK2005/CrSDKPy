@@ -112,6 +112,11 @@ PREVIEW_SCREENNAIL = 2
 SLOT_1 = 1
 SLOT_2 = 2
 
+# Vendor CrLensInformationType. Zero is the vendor's own "undefined".
+LENS_INFO_UNDEFINED = 0
+LENS_INFO_FEET = 1
+LENS_INFO_METER = 2
+
 
 class CameraInfoStruct(ctypes.Structure):
     _fields_ = [
@@ -160,6 +165,17 @@ class ContentStruct(ctypes.Structure):
         ("created_millisecond", c_uint16),
         ("reserved", c_uint16),
         ("path", c_char * 256),
+    ]
+
+
+class LensInfoStruct(ctypes.Structure):
+    """One row of the lens's focus-distance table, as the ABI carries it."""
+
+    _fields_ = [
+        ("info_type", c_uint32),
+        ("data_version", c_uint32),
+        ("normalized_value", c_uint32),
+        ("focus_position", c_uint32),
     ]
 
 
@@ -382,6 +398,17 @@ def _declare(lib: ctypes.CDLL) -> None:
 
     lib.crsdkpy_cancel_content_download.restype = c_int32
     lib.crsdkpy_cancel_content_download.argtypes = [c_uint64]
+
+    lib.crsdkpy_request_lens_information.restype = c_int32
+    lib.crsdkpy_request_lens_information.argtypes = [c_uint64]
+
+    lib.crsdkpy_get_lens_information.restype = c_int32
+    lib.crsdkpy_get_lens_information.argtypes = [
+        c_uint64,
+        POINTER(LensInfoStruct),
+        c_uint32,
+        POINTER(c_uint32),
+    ]
 
     lib.crsdkpy_take_transfer_path.restype = c_int32
     lib.crsdkpy_take_transfer_path.argtypes = [

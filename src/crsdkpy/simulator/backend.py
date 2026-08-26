@@ -19,7 +19,13 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from ..backend.contract import Backend, BackendCameraInfo, ContentRef, LiveViewInfo
+from ..backend.contract import (
+    Backend,
+    BackendCameraInfo,
+    ContentRef,
+    LensDistanceRow,
+    LiveViewInfo,
+)
 from ..capabilities import SessionCapabilities
 from ..clock import Clock, VirtualClock
 from ..commands import Command, CommandLike, CommandParameter
@@ -52,7 +58,9 @@ from ..events import (
     RecordingEvent,
     TransferEvent,
     UnknownEvent,
+    WarningEvent,
 )
+from ..lens import LENS_REQUEST_SUCCEEDED
 from ..previews import LiveViewFrame, Preview
 from ..properties import Property, PropertyCode
 from ..status import BatteryStatus, StorageSlot
@@ -128,11 +136,17 @@ class _Session:
                 P.CODE_FOCUS_DRIVING_STATUS,
             ):
                 self.properties.pop(code, None)
+        self.properties[P.CODE_LENS_INFORMATION_ENABLE_STATUS] = (
+            1 if scenario.lens_information_enabled else 0
+        )
         for code in scenario.unavailable_property_codes:
             self.properties.pop(code, None)
         for code, value in scenario.property_value_overrides:
             if code in self.properties:
                 self.properties[code] = value
+
+        #: Set by a request, cleared by the single read the vendor allows.
+        self.lens_information_ready = False
 
         self.recording = RecordingState.IDLE
         self.postview_configured = False
@@ -192,6 +206,12 @@ class _Session:
             return 30_000
         if code == P.CODE_FOCUS_DRIVING_STATUS:
             return 1
+        if code == P.CODE_LENS_MODEL_NAME:
+            return "SIM 24-70mm F2.8"
+        if code == P.CODE_LENS_VERSION_NUMBER:
+            return "02"
+        if code == P.CODE_LENS_SERIAL_NUMBER:
+            return "SIMLENS0001"
         return 0
 
     # -- scheduling --------------------------------------------------------
@@ -1245,6 +1265,49 @@ class SimulatedBackend(Backend):
         self._schedule_reconnect(session, self._clock.now_ms() + delay_ms)
 
     # -- extension point ---------------------------------------------------
+    # -- lens --------------------------------------------------------------
+    def request_lens_information(self, session_id: str) -> None:
+        session = self._live_session(session_id, "request_lens_information")
+        # A new request invalidates whatever the previous one prepared, which
+        # is what makes another read legal.
+        session.lens_information_ready = False
+        if session.scenario.lens_request_silent:
+            return
+        outcome = int(session.scenario.lens_request_outcome)
+        if outcome == LENS_REQUEST_SUCCEEDED:
+            session.lens_information_ready = True
+        now = self._clock.now_ms()
+        session.schedule(
+            now + session.profile.timings.request_outcome,
+            lambda: (WarningEvent(timestamp_ms=self._clock.now_ms(), code=outcome),),
+        )
+
+    def get_lens_information(self, session_id: str) -> Sequence[LensDistanceRow]:
+        session = self._live_session(session_id, "get_lens_information")
+        rows = int(session.scenario.lens_distance_rows)
+        if not session.lens_information_ready or rows <= 0:
+            raise UnsupportedOperationError(
+                "the camera reports no applicable lens information; either the "
+                "attached lens carries no focus-distance data or no "
+                "lens-information request has succeeded yet",
+                capability="lens.information",
+                operation="lens.read_information",
+            )
+        # The vendor allows one read per request, and the simulator enforces
+        # that rather than being quietly more permissive than hardware.
+        session.lens_information_ready = False
+        return tuple(
+            LensDistanceRow(
+                info_type=1 if index >= rows // 2 else 2,
+                data_version=1,
+                # Descending normalized values against ascending distances, the
+                # shape the vendor's own interpolation sample assumes.
+                normalized_value=1000 - (index % max(1, rows // 2)) * 100,
+                focus_position=50 * (2 ** (index % max(1, rows // 2))),
+            )
+            for index in range(rows)
+        )
+
     def raw_call(
         self, session_id: str, operation: str, payload: Mapping[str, Any]
     ) -> Any:

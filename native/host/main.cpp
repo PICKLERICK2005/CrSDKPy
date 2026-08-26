@@ -206,6 +206,41 @@ void dispatch(const crsdkpy_ipc_request& request,
         return;
     }
 
+    case CRSDKPY_OP_REQUEST_LENS_INFORMATION: {
+        const int32_t status = crsdkpy_request_lens_information(request.handle);
+        fill(response, status, categorise(status), "");
+        if (status != CRSDKPY_OK) attach_bridge_error(response);
+        return;
+    }
+
+    case CRSDKPY_OP_GET_LENS_INFORMATION: {
+        uint32_t count = 0;
+        int32_t status =
+            crsdkpy_get_lens_information(request.handle, nullptr, 0, &count);
+        if (status != CRSDKPY_OK) {
+            fill(response, status, categorise(status), "");
+            attach_bridge_error(response);
+            return;
+        }
+        std::vector<crsdkpy_lens_info> rows(count ? count : 1);
+        uint32_t produced = 0;
+        status = crsdkpy_get_lens_information(request.handle, rows.data(), count,
+                                             &produced);
+        if (status != CRSDKPY_OK) {
+            fill(response, status, categorise(status), "");
+            attach_bridge_error(response);
+            return;
+        }
+        fill(response, CRSDKPY_OK, CRSDKPY_CAT_NONE, "");
+        blob_out.resize(sizeof(crsdkpy_lens_info) * produced);
+        if (produced) {
+            std::memcpy(blob_out.data(), rows.data(), blob_out.size());
+        }
+        response.count = produced;
+        response.item_size = sizeof(crsdkpy_lens_info);
+        return;
+    }
+
     case CRSDKPY_OP_INIT: {
         const char* adapter = request.text[0] ? request.text : nullptr;
         const int32_t status = crsdkpy_init(adapter);

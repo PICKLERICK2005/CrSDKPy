@@ -54,7 +54,13 @@ from ..events import Event
 from ..previews import LiveViewFrame, Preview
 from ..properties import Property, PropertyCode, PropertyRange
 from . import _cabi, _ipc
-from .contract import Backend, BackendCameraInfo, ContentRef, LiveViewInfo
+from .contract import (
+    Backend,
+    BackendCameraInfo,
+    ContentRef,
+    LensDistanceRow,
+    LiveViewInfo,
+)
 from .native import (
     _ABI_TO_STATE,
     _PREVIEW_TIMEOUT_MS,
@@ -73,8 +79,10 @@ from .native import (
     decode_camera_info,
     decode_content,
     decode_event,
+    decode_lens_row,
     decode_live_view_info,
     decode_property,
+    no_applicable_lens_information,
     parameter_to_abi,
     preview_kind_to_abi,
     unsupported_content_mode,
@@ -851,6 +859,30 @@ class HostBackend(
             i32=parameter_to_abi(parameter),
             operation="send_command",
         )
+
+    # -- lens --------------------------------------------------------------
+    def request_lens_information(self, session_id: str) -> None:
+        handle = self._handle(session_id, "request_lens_information")
+        self._call(
+            _ipc.OP_REQUEST_LENS_INFORMATION,
+            handle=handle,
+            operation="request_lens_information",
+        )
+
+    def get_lens_information(self, session_id: str) -> Sequence[LensDistanceRow]:
+        handle = self._handle(session_id, "get_lens_information")
+        try:
+            response, blob = self._call(
+                _ipc.OP_GET_LENS_INFORMATION,
+                handle=handle,
+                operation="get_lens_information",
+            )
+        except PropertyNotSupportedError as exc:
+            raise no_applicable_lens_information() from exc
+        raws = _ipc.unpack_array(_cabi.LensInfoStruct, blob, response.count)
+        if not raws:
+            raise no_applicable_lens_information()
+        return [decode_lens_row(raw) for raw in raws]
 
     # -- live view ---------------------------------------------------------
     def live_view_info(self, session_id: str) -> LiveViewInfo:

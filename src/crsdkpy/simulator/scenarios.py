@@ -111,6 +111,20 @@ class Scenario:
     #: Emit an event code with no typed representation.
     emit_unknown_events: bool = False
 
+    # -- lens --------------------------------------------------------------
+    #: What the camera reports for LensInformationEnableStatus. The first
+    #: characterized body reported Disable with a prime attached, so Disable
+    #: is the default and Enable is the case that has never met hardware.
+    lens_information_enabled: bool = False
+    #: Vendor warning the request answers with. Defaults to success so the
+    #: refusal paths have to be asked for explicitly.
+    lens_request_outcome: int = 0x0002003B
+    #: Rows the prepared table contains. Zero means the vendor's "no
+    #: applicable information", which is what a prime lens produces.
+    lens_distance_rows: int = 0
+    #: Withhold the request outcome entirely, so the wait has to time out.
+    lens_request_silent: bool = False
+
     def replace(self, **changes: object) -> Scenario:
         """Return a copy with *changes* applied."""
         return replace(self, **changes)  # type: ignore[arg-type]
@@ -136,6 +150,16 @@ SCENARIOS: dict[str, Scenario] = {
             release_clears_s1=False,
         ),
         Scenario(name="capture_without_exposure", capture_without_exposure=True),
+        Scenario(
+            name="lens_with_distance_table",
+            lens_information_enabled=True,
+            lens_distance_rows=6,
+        ),
+        Scenario(
+            name="lens_request_refused",
+            lens_information_enabled=True,
+            lens_request_outcome=0x0002003D,
+        ),
         Scenario(name="delayed_content", content_extra_delay_ms=3_000),
         Scenario(name="non_contiguous_content", content_id_step=2),
         Scenario(name="stale_preview", stale_preview=True),

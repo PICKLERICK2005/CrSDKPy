@@ -86,6 +86,11 @@ extern "C" {
 #define CRSDKPY_OP_PROPERTY_VALUES    22
 #define CRSDKPY_OP_START_CONTENT_DOWNLOAD 23
 #define CRSDKPY_OP_CANCEL_CONTENT_DOWNLOAD 24
+/* Lens focus-distance table. Two operations because the vendor's own contract
+ * is two-step: a request whose result arrives on the warning channel, then one
+ * read of what it prepared. */
+#define CRSDKPY_OP_REQUEST_LENS_INFORMATION 25
+#define CRSDKPY_OP_GET_LENS_INFORMATION     26
 /* Test-only: makes the host terminate abruptly so process-death handling can
  * be exercised without provoking a real native fault. */
 #define CRSDKPY_OP_TEST_CRASH      900

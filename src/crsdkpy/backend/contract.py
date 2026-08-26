@@ -46,6 +46,7 @@ __all__ = [
     "Backend",
     "BackendCameraInfo",
     "ContentRef",
+    "LensDistanceRow",
     "LiveViewInfo",
 ]
 
@@ -109,6 +110,22 @@ class ContentRef:
         if not self.path:
             return None
         return self.path.replace("\\", "/").rsplit("/", 1)[-1]
+
+
+@dataclass(frozen=True)
+class LensDistanceRow:
+    """One row of the lens's focus-distance table, as the camera reported it.
+
+    The vendor's structure maps a follow-focus value onto a distance expressed
+    in the unit named by :attr:`info_type`. No unit scale is applied: the API
+    reference documents the fields and the unit selector but not a multiplier
+    for :attr:`focus_position`, so the camera's own numbers are what travel.
+    """
+
+    info_type: int
+    data_version: int
+    normalized_value: int
+    focus_position: int
 
 
 @dataclass(frozen=True)
@@ -336,6 +353,30 @@ class Backend:
     def get_preview(
         self, session_id: str, content_id: int, kind: PreviewKind
     ) -> Preview:  # pragma: no cover
+        raise NotImplementedError
+
+    # -- lens --------------------------------------------------------------
+    def request_lens_information(self, session_id: str) -> None:  # pragma: no cover
+        """Ask the camera to prepare the lens's focus-distance table.
+
+        Asynchronous by the vendor's design: the outcome arrives on the event
+        stream as a warning, not from this call.
+        """
+        raise NotImplementedError
+
+    def get_lens_information(  # pragma: no cover
+        self, session_id: str
+    ) -> Sequence[LensDistanceRow]:
+        """Read the table the last request prepared.
+
+        Implementations must not retain or hand back a vendor-owned list: the
+        vendor allows one read per request and requires the list be released.
+
+        Raises :class:`~crsdkpy.errors.UnsupportedOperationError` when the
+        camera reports no applicable information, which it reports both for a
+        lens that carries no distance data and for a read with no successful
+        request behind it.
+        """
         raise NotImplementedError
 
     # -- video -------------------------------------------------------------
