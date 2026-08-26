@@ -46,6 +46,7 @@ from .liveview import LiveView
 from .previews import Preview
 from .properties import Property, PropertyCode, PropertySnapshot
 from .raw import RawAccess
+from .settings import Drive, Exposure, WhiteBalance
 from .status import BatteryStatus, StorageSlot
 from .video import Video
 
@@ -155,6 +156,9 @@ class Session:
         self.live_view = LiveView(self)
         self.video = Video(self)
         self.raw = RawAccess(self)
+        self.exposure = Exposure(self)
+        self.white_balance = WhiteBalance(self)
+        self.drive = Drive(self)
 
         self._pump(timeout_ms=0)
         self._state = backend.connection_state(session_id)

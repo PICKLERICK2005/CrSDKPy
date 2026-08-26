@@ -66,6 +66,9 @@ STATE = {
         0x0766: ("range", [0, 65535, 1]),
         # A short enumerated list, as a mode property reports.
         0x0109: ("enum", [1, 2, 3]),
+        0x0104: ("enum", [100, 125, 200, 400]),
+        0x0108: ("enum", [0, 0x11, 0x12]),
+        0x010E: ("enum", [1, 0x10001]),
         # Present but of a shape the bridge does not take apart.
         0x7FFE: ("raw", []),
     },
@@ -83,6 +86,8 @@ STATE = {
     # IsoSensitivity, FocusMode(AF-S), S1, FocusIndication, unnamed code.
     "properties": {
         0x0104: 100,     # IsoSensitivity
+        0x0108: 0,       # WhiteBalance, auto
+        0x010E: 1,       # DriveMode, single
         0x0109: 2,       # FocusMode, AF-S
         0x0001: 1,       # S1, unlocked
         0x0119: 2,       # StillImageStoreDestination, memory card

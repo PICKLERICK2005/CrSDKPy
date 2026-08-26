@@ -128,6 +128,11 @@ class _Session:
                 P.CODE_FOCUS_DRIVING_STATUS,
             ):
                 self.properties.pop(code, None)
+        for code in scenario.unavailable_property_codes:
+            self.properties.pop(code, None)
+        for code, value in scenario.property_value_overrides:
+            if code in self.properties:
+                self.properties[code] = value
 
         self.recording = RecordingState.IDLE
         self.postview_configured = False
@@ -165,6 +170,16 @@ class _Session:
             return 0x0000
         if code == P.CODE_ISO:
             return 100
+        if code == P.CODE_F_NUMBER:
+            return 140
+        if code == P.CODE_EXPOSURE_COMPENSATION:
+            return 0
+        if code == P.CODE_SHUTTER_SPEED:
+            return 0x0001007D
+        if code == P.CODE_EXPOSURE_PROGRAM:
+            return 1
+        if code == P.CODE_WHITE_BALANCE:
+            return 0x0000
         if code in (P.CODE_CAMERA_CAUTION, P.CODE_SYSTEM_CAUTION):
             return 0x01
         if code == P.CODE_DESTINATION:
@@ -485,7 +500,20 @@ class SimulatedBackend(Backend):
             and not session.scenario.focus_range_available
         ):
             prop = replace(prop, value_range=None)
+        if code in session.scenario.read_only_property_codes:
+            prop = replace(prop, access=PropertyAccess.READ_ONLY)
+        if code in session.scenario.values_undecoded_property_codes:
+            metadata = dict(prop.metadata)
+            metadata["values_undecoded"] = True
+            prop = replace(
+                prop, allowed_values=(), value_range=None, metadata=metadata
+            )
         return prop
+
+    def simulate_property_unavailable(self, session_id: str, code: int) -> None:
+        """Remove one simulated property as if runtime capability disappeared."""
+        session = self._live_session(session_id, "simulate_property_unavailable")
+        session.properties.pop(int(code), None)
 
     def get_property(self, session_id: str, code: PropertyCode) -> Property:
         session = self._live_session(session_id, "get_property")

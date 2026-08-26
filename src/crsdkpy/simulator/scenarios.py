@@ -104,6 +104,10 @@ class Scenario:
     busy: bool = False
     #: Emit a straggler property batch after a physical change.
     property_stragglers: bool = True
+    unavailable_property_codes: tuple[int, ...] = ()
+    read_only_property_codes: tuple[int, ...] = ()
+    property_value_overrides: tuple[tuple[int, int], ...] = ()
+    values_undecoded_property_codes: tuple[int, ...] = ()
     #: Emit an event code with no typed representation.
     emit_unknown_events: bool = False
 

@@ -97,6 +97,7 @@ from .properties import (
 )
 from .sdk import SDK
 from .session import Session
+from .settings import Drive, Exposure, Setting, WhiteBalance
 from .status import BatteryStatus, StorageSlot
 from .transfers import ContentDownload
 from .video import Recording, Video
@@ -122,6 +123,7 @@ __all__ = [
     "PropertySnapshot",
     "PropertyAccess",
     "PropertyValueType",
+    "Setting",
     "ReconnectPolicy",
     "register_property_name",
     # events
@@ -149,6 +151,9 @@ __all__ = [
     "FocusBracketFrame",
     "FocusBracketResult",
     "FocusDrivingStatus",
+    "Exposure",
+    "WhiteBalance",
+    "Drive",
     # imaging
     "LiveView",
     "LiveViewFrame",

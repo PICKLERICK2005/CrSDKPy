@@ -56,6 +56,11 @@ CODE_FOCUS_INDICATION = 0x0707
 CODE_DRIVE_MODE = 0x010E
 CODE_RECORDING_STATE = 0x0705
 CODE_ISO = 0x0104
+CODE_F_NUMBER = 0x0100
+CODE_EXPOSURE_COMPENSATION = 0x0101
+CODE_SHUTTER_SPEED = 0x0103
+CODE_EXPOSURE_PROGRAM = 0x0105
+CODE_WHITE_BALANCE = 0x0108
 CODE_DESTINATION = 0x0119
 CODE_CAMERA_CAUTION = 0x078B
 CODE_SYSTEM_CAUTION = 0x078C
@@ -200,6 +205,11 @@ def _base_properties() -> tuple[int, ...]:
     return (
         CODE_S1,
         CODE_ISO,
+        CODE_F_NUMBER,
+        CODE_EXPOSURE_COMPENSATION,
+        CODE_SHUTTER_SPEED,
+        CODE_EXPOSURE_PROGRAM,
+        CODE_WHITE_BALANCE,
         CODE_DRIVE_MODE,
         CODE_FOCUS_MODE,
         CODE_RECORDING_STATE,
@@ -226,9 +236,23 @@ def build_property(code: int, value: object) -> Property:
     if code == CODE_FOCUS_MODE:
         # Physical control on many bodies: observable, not settable remotely.
         access = PropertyAccess.READ_ONLY
+    if code == CODE_ISO:
+        allowed = (100, 125, 200, 400, 0xFFFFFF)
+    if code == CODE_F_NUMBER:
+        allowed = (140, 200, 280, 400)
+    if code == CODE_SHUTTER_SPEED:
+        allowed = (0x0001003C, 0x0001007D, 0x000101F4)
+    if code == CODE_EXPOSURE_PROGRAM:
+        allowed = (1, 2, 3, 4)
+    if code == CODE_WHITE_BALANCE:
+        allowed = (0x0000, 0x0011, 0x0012, 0x0013, 0x0014, 0x0100)
+    if code == CODE_DRIVE_MODE:
+        allowed = (0x00000001, 0x00010001, 0x00030001)
     value_range = None
     if code in (CODE_FOCUS_POSITION_SETTING, CODE_FOCUS_POSITION_CURRENT):
         value_range = PropertyRange(0, 65535, 1)
+    if code == CODE_EXPOSURE_COMPENSATION:
+        value_range = PropertyRange(-3000, 3000, 1000)
     return Property(
         code=PropertyCode(code),
         value=value,

@@ -1035,6 +1035,20 @@ def test_focus_facade_uses_host_property_metadata() -> None:
         sdk.close()
 
 
+def test_typed_settings_use_host_property_metadata() -> None:
+    sdk = crsdkpy.SDK(backend=make_backend())
+    try:
+        session = sdk.discover()[0].open(crsdkpy.SessionMode.REMOTE)
+        assert session.exposure.iso.value == 100
+        assert session.exposure.iso.allowed_values == (100, 125, 200, 400)
+        assert session.white_balance.mode.value == 0
+        assert session.drive.mode.value == 1
+        session.exposure.iso.set(125)
+        assert session.exposure.iso.value == 125
+    finally:
+        sdk.close()
+
+
 def test_an_enumerated_property_reports_its_permitted_values() -> None:
     backend = make_backend()
     try:
@@ -1069,7 +1083,7 @@ def test_a_property_advertising_nothing_stays_unconstrained() -> None:
     try:
         backend.start()
         session = backend.open_session("cam-0", crsdkpy.SessionMode.REMOTE)
-        prop = backend.get_property(session, crsdkpy.PropertyCode(0x0104))
+        prop = backend.get_property(session, crsdkpy.PropertyCode(0x0702))
         assert prop.allowed_values == ()
         assert prop.value_range is None
         assert "values_undecoded" not in prop.metadata

@@ -95,7 +95,7 @@ def test_allowed_values_reported(session: crsdkpy.Session) -> None:
 def test_property_without_constraints_accepts_anything(
     session: crsdkpy.Session,
 ) -> None:
-    prop = session.properties.get(P.CODE_ISO)
+    prop = session.properties.get(0x0581)
     assert prop.allowed_values == ()
     assert prop.accepts(12800)
 

@@ -37,6 +37,7 @@ architecture rather than adding a second backend.
 | Property enumeration and reads | yes | yes | **yes** |
 | Unknown numeric property codes | yes | yes | **yes** |
 | Property writes (typed, read-modify-write) | yes | yes | **yes** ² |
+| Typed exposure / white-balance / drive settings | yes | yes | no |
 | Event stream | yes | yes | **yes** |
 | Generic commands | yes | yes | **yes** |
 | MF still capture, judged on the exposure event | yes | yes | **yes** ³ |

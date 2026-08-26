@@ -185,6 +185,33 @@ session.battery          # BatteryStatus(87%)
 session.storage          # (StorageSlot(1, ok, shots=1234),)
 ```
 
+### Typed camera settings
+
+Exposure, white-balance, and drive controls are live views over the generic
+property layer:
+
+```python
+session.exposure.iso.value
+session.exposure.shutter_speed.allowed_values
+session.exposure.f_number.writable
+session.exposure.compensation.value_range
+session.exposure.program.set(1)
+
+session.white_balance.mode.value
+session.drive.mode.value
+```
+
+Every setting also exposes `available`, `accepts(value)`, and `set(value)`.
+Access and constraints come from the camera's current property metadata, not
+its model name. Unknown current numeric values remain unchanged even when they
+are absent from `allowed_values`; advertised constraints govern requested
+writes only. A `values_undecoded` setting remains readable but reports that
+trustworthy client-side validation is unavailable.
+
+Unless a conversion is explicitly documented, values use Sony CRSDK's raw
+property representation. In particular, CrSDKPy does not guess seconds,
+f-stops, EV, Kelvin, or physical units from numeric codes.
+
 ### Raw escape hatch
 
 Vendor features CrSDKPy has not modelled stay reachable, including property
