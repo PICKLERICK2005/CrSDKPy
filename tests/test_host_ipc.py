@@ -1024,6 +1024,17 @@ def test_a_range_property_reports_its_range() -> None:
         backend.shutdown()
 
 
+def test_focus_facade_uses_host_property_metadata() -> None:
+    sdk = crsdkpy.SDK(backend=make_backend())
+    try:
+        session = sdk.discover()[0].open(crsdkpy.SessionMode.REMOTE)
+        assert session.focus.position == 30_000
+        assert session.focus.range == crsdkpy.PropertyRange(0, 65535, 1)
+        assert session.focus.driving_status == crsdkpy.FocusDrivingStatus(1)
+    finally:
+        sdk.close()
+
+
 def test_an_enumerated_property_reports_its_permitted_values() -> None:
     backend = make_backend()
     try:

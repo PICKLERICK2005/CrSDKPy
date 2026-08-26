@@ -63,6 +63,7 @@ STATE = {
     "values": {
         # FocusPositionSetting-shaped: a full 16-bit range, unit step.
         0x020E: ("range", [0, 65535, 1]),
+        0x0766: ("range", [0, 65535, 1]),
         # A short enumerated list, as a mode property reports.
         0x0109: ("enum", [1, 2, 3]),
         # Present but of a shape the bridge does not take apart.
@@ -93,6 +94,8 @@ STATE = {
         0x0709: 1234,    # MediaSLOT1_RemainingNumber
         0x070A: 5678,    # MediaSLOT1_RemainingTime
         0x020E: 30000,   # FocusPositionSetting, advertises a range
+        0x0766: 30000,   # FocusPositionCurrentValue
+        0x0767: 1,       # FocusDrivingStatus, idle
         0x7FFE: 42,      # a deliberately unnamed code
         # String-valued properties. The vendor reports zero through the numeric
         # accessor for these, which is what the property array carries; the
@@ -167,6 +170,8 @@ def make_property(code: int, value: int) -> _cabi.PropertyStruct:
     # 2 is the string value type; the rest are plain integers here.
     prop.value_type = 2 if code in STATE["strings"] else 1
     prop.access = 3
+    if code in (0x0766, 0x0767):
+        prop.access = 1
     prop.allowed_count = 0
     return prop
 

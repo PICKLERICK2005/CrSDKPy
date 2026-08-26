@@ -25,7 +25,7 @@ from ..enums import (
     SessionMode,
     StillDestination,
 )
-from ..properties import Property, PropertyCode
+from ..properties import Property, PropertyCode, PropertyRange
 
 __all__ = [
     "CameraProfile",
@@ -59,6 +59,9 @@ CODE_ISO = 0x0104
 CODE_DESTINATION = 0x0119
 CODE_CAMERA_CAUTION = 0x078B
 CODE_SYSTEM_CAUTION = 0x078C
+CODE_FOCUS_POSITION_SETTING = 0x020E
+CODE_FOCUS_POSITION_CURRENT = 0x0766
+CODE_FOCUS_DRIVING_STATUS = 0x0767
 
 
 @dataclass(frozen=True)
@@ -204,6 +207,9 @@ def _base_properties() -> tuple[int, ...]:
         CODE_CAMERA_CAUTION,
         CODE_SYSTEM_CAUTION,
         CODE_DESTINATION,
+        CODE_FOCUS_POSITION_SETTING,
+        CODE_FOCUS_POSITION_CURRENT,
+        CODE_FOCUS_DRIVING_STATUS,
     )
 
 
@@ -212,19 +218,24 @@ def build_property(code: int, value: object) -> Property:
     access = PropertyAccess.READ_WRITE
     allowed: tuple[object, ...] = ()
     if code in (CODE_FOCUS_INDICATION, CODE_RECORDING_STATE, CODE_CAMERA_CAUTION,
-                CODE_SYSTEM_CAUTION):
+                CODE_SYSTEM_CAUTION, CODE_FOCUS_POSITION_CURRENT,
+                CODE_FOCUS_DRIVING_STATUS):
         access = PropertyAccess.READ_ONLY
     if code == CODE_S1:
         allowed = (LOCK_UNLOCKED, LOCK_LOCKED)
     if code == CODE_FOCUS_MODE:
         # Physical control on many bodies: observable, not settable remotely.
         access = PropertyAccess.READ_ONLY
+    value_range = None
+    if code in (CODE_FOCUS_POSITION_SETTING, CODE_FOCUS_POSITION_CURRENT):
+        value_range = PropertyRange(0, 65535, 1)
     return Property(
         code=PropertyCode(code),
         value=value,
         value_type=PropertyValueType.INT,
         access=access,
         allowed_values=allowed,
+        value_range=value_range,
     )
 
 

@@ -377,6 +377,28 @@ errors; no native crash occurred.
 - AF/MF physical switch produces a coalesced property-change callback batch with
   an occasional straggler approximately 102 ms later.
 
+### Absolute focus-position characterization
+
+Reference lens: FE 50mm F1.4 GM. This evidence predates the public focus facade;
+it validates the documented property behavior, not a new end-to-end public API
+hardware run.
+
+- `FocusPositionSetting` (`0x020E`) was read/write;
+  `FocusPositionCurrentValue` (`0x0766`) was read-only; both advertised
+  `min=0`, `max=65535`, `step=1`.
+- `FocusDrivingStatus` (`0x0767`) reported `1` while idle and `2` while driving.
+- Five movement probes reached the exact commanded position, including a
+  repeated target. The property write itself was non-blocking.
+- Initial movement was observed after roughly 120-205 ms. One approximately
+  600-unit move completed physically around 700 ms; a conservative observed
+  settle including a quiet window was around 1.1 s. These are measurements,
+  not fixed API delays.
+- Absolute positioning was physically exercised in AF-S. The setting remained
+  read/write in AF-C, but no AF-C write was performed. MF writing remains
+  hardware-unverified.
+- Position values are opaque camera/lens units. They do not imply distance,
+  millimetres, diopters, or a normalized physical scale.
+
 ## Deferred or untested
 
 - Unsafe small-size transfer path
@@ -385,7 +407,8 @@ errors; no native crash occurred.
 - Passive sleep/wake; the remote session exposed no general sleep property and
   may inhibit automatic sleep
 - Live-view OSD/overlay data
-- AF area positioning and focus-position stepping
+- AF area positioning
+- Absolute focus writes in AF-C and MF
 - Burst/continuous shooting
 - Remote + Card postview delivery (unresolved; only Host+Card was confirmed)
 - Behavior on another Sony body, especially an Alpha 7-series camera

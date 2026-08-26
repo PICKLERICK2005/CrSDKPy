@@ -75,6 +75,15 @@ class Scenario:
     transfer_outcome: str = "ok"
     transfer_delay_ms: int = 500
 
+    # -- focus positioning ------------------------------------------------
+    focus_move_delay_ms: int = 200
+    focus_stuck_driving: bool = False
+    focus_unknown_driving_status: Optional[int] = None
+    focus_position_available: bool = True
+    focus_range_available: bool = True
+    focus_position_writable: bool = True
+    focus_session_loss_ms: Optional[int] = None
+
     # -- live view ---------------------------------------------------------
     #: The info call succeeds while reporting a zero buffer.
     live_view_info_ok_but_empty: bool = False
@@ -128,6 +137,10 @@ SCENARIOS: dict[str, Scenario] = {
         Scenario(name="transfer_busy", transfer_outcome="busy"),
         Scenario(name="transfer_failed", transfer_outcome="failed"),
         Scenario(name="transfer_storage_full", transfer_outcome="storage_full"),
+        Scenario(name="focus_move_stuck", focus_stuck_driving=True),
+        Scenario(name="focus_unknown_status", focus_unknown_driving_status=99),
+        Scenario(name="focus_unavailable", focus_position_available=False),
+        Scenario(name="focus_read_only", focus_position_writable=False),
         Scenario(name="live_view_empty_info", live_view_info_ok_but_empty=True),
         Scenario(name="live_view_fetch_fails", live_view_fetch_fails=True),
         Scenario(name="reconnect", reconnect_after_ms=1_000),

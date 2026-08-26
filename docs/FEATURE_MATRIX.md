@@ -41,6 +41,7 @@ architecture rather than adding a second backend.
 | Generic commands | yes | yes | **yes** |
 | MF still capture, judged on the exposure event | yes | yes | **yes** ³ |
 | Gated autofocus (both AF channels) | yes | yes | **yes** ⁴ |
+| Absolute focus-position facade | yes | yes | no |
 | Autofocus failure leaves no half-press engaged | yes | yes | **yes** |
 | Content index, exact content identity | yes | yes | **yes** ⁵ |
 | Thumbnail | yes | yes | **yes** ⁵ |

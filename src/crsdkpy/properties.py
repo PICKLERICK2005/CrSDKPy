@@ -46,6 +46,7 @@ KNOWN_PROPERTY_NAMES: dict[int, str] = {
     0x011A: "PriorityKeySettings",
     0x0179: "FocusModeSetting",
     0x0194: "FollowFocusPositionSetting",
+    0x020E: "FocusPositionSetting",
     0x0260: "PreAF",
     0x0500: "S2",
     0x0506: "StillImageTransSize",

@@ -139,6 +139,25 @@ except crsdkpy.AutofocusFailedError as exc:
     print("no photo taken:", exc.focus_state)
 ```
 
+### Absolute focus position
+
+When the camera/lens exposes Sony's documented focus-position properties, the
+session provides a small generic facade:
+
+```python
+session.focus.position          # opaque camera/lens position integer
+session.focus.range             # PropertyRange reported by the camera, or None
+session.focus.is_driving        # True, False, or None for an unknown status
+
+session.focus.move_to(30_600)   # starts a non-blocking absolute move
+position = session.focus.wait_until_settled(timeout_ms=3_000)
+session.focus.move_relative(-100)  # current absolute position plus delta
+```
+
+These values are not distances, diopters, millimetres, or normalized physical
+positions. Moves are validated against the property's advertised metadata;
+unsupported and read-only camera/lens combinations fail explicitly.
+
 ### Device status without vendor codes
 
 Battery and media are the two readings almost every integration wants, and both

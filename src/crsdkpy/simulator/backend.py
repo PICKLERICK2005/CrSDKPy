@@ -15,6 +15,7 @@ import itertools
 import random
 import struct
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -26,6 +27,7 @@ from ..enums import (
     ConnectionState,
     FocusState,
     PreviewKind,
+    PropertyAccess,
     ReconnectPolicy,
     RecordingState,
     SessionMode,
@@ -119,6 +121,13 @@ class _Session:
         self.properties: dict[int, Any] = {}
         for code in profile.property_codes_for(mode):
             self.properties[code] = self._initial_value(code, destination)
+        if not scenario.focus_position_available:
+            for code in (
+                P.CODE_FOCUS_POSITION_SETTING,
+                P.CODE_FOCUS_POSITION_CURRENT,
+                P.CODE_FOCUS_DRIVING_STATUS,
+            ):
+                self.properties.pop(code, None)
 
         self.recording = RecordingState.IDLE
         self.postview_configured = False
@@ -163,6 +172,10 @@ class _Session:
                 StillDestination.HOST: 0x0001,
                 StillDestination.HOST_AND_MEMORY_CARD: 0x0003,
             }[destination]
+        if code in (P.CODE_FOCUS_POSITION_SETTING, P.CODE_FOCUS_POSITION_CURRENT):
+            return 30_000
+        if code == P.CODE_FOCUS_DRIVING_STATUS:
+            return 1
         return 0
 
     # -- scheduling --------------------------------------------------------
@@ -454,9 +467,24 @@ class SimulatedBackend(Backend):
     def list_properties(self, session_id: str) -> Sequence[Property]:
         session = self._live_session(session_id, "list_properties")
         return [
-            P.build_property(code, value)
+            self._build_property(session, code, value)
             for code, value in sorted(session.properties.items())
         ]
+
+    @staticmethod
+    def _build_property(session: _Session, code: int, value: Any) -> Property:
+        prop = P.build_property(code, value)
+        if (
+            code == P.CODE_FOCUS_POSITION_SETTING
+            and not session.scenario.focus_position_writable
+        ):
+            prop = replace(prop, access=PropertyAccess.READ_ONLY)
+        if (
+            code in (P.CODE_FOCUS_POSITION_SETTING, P.CODE_FOCUS_POSITION_CURRENT)
+            and not session.scenario.focus_range_available
+        ):
+            prop = replace(prop, value_range=None)
+        return prop
 
     def get_property(self, session_id: str, code: PropertyCode) -> Property:
         session = self._live_session(session_id, "get_property")
@@ -465,7 +493,7 @@ class SimulatedBackend(Backend):
             raise PropertyNotSupportedError(
                 f"camera does not expose property {PropertyCode(key)}", code=key
             )
-        return P.build_property(key, session.properties[key])
+        return self._build_property(session, key, session.properties[key])
 
     def set_property(self, session_id: str, code: PropertyCode, value: Any) -> None:
         session = self._live_session(session_id, "set_property")
@@ -474,7 +502,7 @@ class SimulatedBackend(Backend):
             raise PropertyNotSupportedError(
                 f"camera does not expose property {PropertyCode(key)}", code=key
             )
-        prop = P.build_property(key, session.properties[key])
+        prop = self._build_property(session, key, session.properties[key])
         if not prop.writable:
             raise UnsupportedOperationError(
                 f"property {PropertyCode(key)} is read-only",
@@ -491,6 +519,51 @@ class SimulatedBackend(Backend):
                 self._begin_autofocus(session)
             else:
                 self._cancel_autofocus(session)
+        elif key == P.CODE_FOCUS_POSITION_SETTING:
+            self._begin_focus_move(session, int(value))
+
+    def _begin_focus_move(self, session: _Session, target: int) -> None:
+        current = int(session.properties[P.CODE_FOCUS_POSITION_CURRENT])
+        now = self._clock.now_ms()
+        if current == target:
+            session.properties[P.CODE_FOCUS_DRIVING_STATUS] = 1
+            return
+        unknown = session.scenario.focus_unknown_driving_status
+        session.properties[P.CODE_FOCUS_DRIVING_STATUS] = (
+            2 if unknown is None else unknown
+        )
+        session.ready.append(
+            PropertyChangedEvent(
+                timestamp_ms=now,
+                codes=(PropertyCode(P.CODE_FOCUS_DRIVING_STATUS),),
+            )
+        )
+        if session.scenario.focus_session_loss_ms is not None:
+            def _lose_session() -> Sequence[Event]:
+                session.state = ConnectionState.CLOSED
+                return (ConnectionEvent(
+                    timestamp_ms=self._clock.now_ms(),
+                    state=ConnectionState.CLOSED,
+                ),)
+            session.schedule(
+                now + session.scenario.focus_session_loss_ms, _lose_session
+            )
+        if session.scenario.focus_stuck_driving:
+            return
+
+        def _finish() -> Sequence[Event]:
+            session.properties[P.CODE_FOCUS_POSITION_CURRENT] = target
+            session.properties[P.CODE_FOCUS_DRIVING_STATUS] = 1
+            timestamp = self._clock.now_ms()
+            return (PropertyChangedEvent(
+                timestamp_ms=timestamp,
+                codes=(
+                    PropertyCode(P.CODE_FOCUS_POSITION_CURRENT),
+                    PropertyCode(P.CODE_FOCUS_DRIVING_STATUS),
+                ),
+            ),)
+
+        session.schedule(now + session.scenario.focus_move_delay_ms, _finish)
 
     # -- autofocus ---------------------------------------------------------
     def _focus_mode_is_af_c(self, session: _Session) -> bool:

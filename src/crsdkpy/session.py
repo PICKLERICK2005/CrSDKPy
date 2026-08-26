@@ -41,6 +41,7 @@ from .events import (
     FocusEvent,
     FocusSource,
 )
+from .focus import Focus
 from .liveview import LiveView
 from .previews import Preview
 from .properties import Property, PropertyCode, PropertySnapshot
@@ -150,6 +151,7 @@ class Session:
 
         self.properties = Properties(self)
         self.content = Content(self)
+        self.focus = Focus(self)
         self.live_view = LiveView(self)
         self.video = Video(self)
         self.raw = RawAccess(self)

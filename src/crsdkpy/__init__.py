@@ -79,6 +79,7 @@ from .events import (
     UnknownEvent,
     WarningEvent,
 )
+from .focus import Focus, FocusDrivingStatus
 from .liveview import LiveView, LiveViewStats, LiveViewStatus
 from .previews import LiveViewFrame, Preview
 from .properties import (
@@ -137,6 +138,8 @@ __all__ = [
     "CaptureState",
     "FocusResult",
     "FocusState",
+    "Focus",
+    "FocusDrivingStatus",
     # imaging
     "LiveView",
     "LiveViewFrame",
