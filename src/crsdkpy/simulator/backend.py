@@ -137,6 +137,7 @@ class _Session:
         self.transfer_path: Optional[str] = None
         self.transfer_active = False
         self.transfer_canceled = False
+        self.focus_moves_started = 0
         self.contents: list[ContentRef] = []
         self.next_content_id = 131_000
         self.capture_sequence = 0
@@ -523,6 +524,7 @@ class SimulatedBackend(Backend):
             self._begin_focus_move(session, int(value))
 
     def _begin_focus_move(self, session: _Session, target: int) -> None:
+        session.focus_moves_started += 1
         current = int(session.properties[P.CODE_FOCUS_POSITION_CURRENT])
         now = self._clock.now_ms()
         if current == target:
@@ -548,7 +550,10 @@ class SimulatedBackend(Backend):
             session.schedule(
                 now + session.scenario.focus_session_loss_ms, _lose_session
             )
-        if session.scenario.focus_stuck_driving:
+        stuck_after = session.scenario.focus_stuck_after_moves
+        if session.scenario.focus_stuck_driving or (
+            stuck_after is not None and session.focus_moves_started > stuck_after
+        ):
             return
 
         def _finish() -> Sequence[Event]:

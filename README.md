@@ -158,6 +158,23 @@ These values are not distances, diopters, millimetres, or normalized physical
 positions. Moves are validated against the property's advertised metadata;
 unsupported and read-only camera/lens combinations fail explicitly.
 
+Deterministic acquisition across caller-selected positions is available without
+adding any stacking or distance assumptions:
+
+```python
+bracket = session.focus.capture_bracket(
+    [30_000, 30_200, 30_400],
+    restore_start=True,
+)
+for frame in bracket.frames:
+    print(frame.commanded_position, frame.settled_position, frame.capture.state)
+```
+
+Each entry receives exactly one shutter attempt. Missing exposures and exposed
+frames whose durable identity cannot be resolved remain distinguishable through
+the original `Capture` object. Movement or restoration failures raise
+`FocusBracketError` with the partial `result` attached.
+
 ### Device status without vendor codes
 
 Battery and media are the two readings almost every integration wants, and both

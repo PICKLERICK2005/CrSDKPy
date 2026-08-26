@@ -78,6 +78,7 @@ class Scenario:
     # -- focus positioning ------------------------------------------------
     focus_move_delay_ms: int = 200
     focus_stuck_driving: bool = False
+    focus_stuck_after_moves: Optional[int] = None
     focus_unknown_driving_status: Optional[int] = None
     focus_position_available: bool = True
     focus_range_available: bool = True
