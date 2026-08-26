@@ -1136,3 +1136,41 @@ def test_the_lens_request_outcome_arrives_as_an_event_over_ipc() -> None:
         assert any(e.code == 0x0002003B for e in warnings)
     finally:
         backend.shutdown()
+
+
+def test_framing_arguments_and_areas_round_trip_over_ipc() -> None:
+    """Scaled coordinates arrive as sent, and the areas arrive as an array."""
+    backend = make_backend()
+    backend.start()
+    try:
+        session = backend.open_session("FAKE-CAM:0000", crsdkpy.SessionMode.REMOTE)
+        backend.execute_framing(
+            session,
+            {
+                "horizontal_denominator": 640 * 1024,
+                "vertical_denominator": 480 * 1024,
+                "framing_type": 5,
+                "input_areas": {1: (1024, 2048, 3072, 4096)},
+                "output_areas": {2: (0, 0, 5120, 6144)},
+            },
+        )
+        # The host applied it: the camera now reports the requested type.
+        assert backend.get_property(session, crsdkpy.PropertyCode(0x07D1)).value == 5
+
+        backend.update_framing_area(
+            session,
+            {"area": 3, "group": 2, "x": -1024, "y": 1024, "width": 0,
+             "height": 2048},
+        )
+    finally:
+        backend.shutdown()
+
+
+def test_the_framing_tail_struct_matches_the_c_layout() -> None:
+    import ctypes
+
+    # Shares the tail slot with the content arguments, so it must be at least
+    # as long: the host reads whichever struct the operation means.
+    assert ctypes.sizeof(_ipc.FramingArgsStruct) == 40
+    assert ctypes.sizeof(_cabi.FramingAreaStruct) == 24
+    assert ctypes.sizeof(_cabi.LensInfoStruct) == 16

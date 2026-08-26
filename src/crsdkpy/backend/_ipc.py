@@ -19,6 +19,7 @@ from typing import Optional
 
 __all__ = [
     "ContentArgsStruct",
+    "FramingArgsStruct",
     "HeaderStruct",
     "HelloAckStruct",
     "HelloStruct",
@@ -70,6 +71,8 @@ OP_START_CONTENT_DOWNLOAD = 23
 OP_CANCEL_CONTENT_DOWNLOAD = 24
 OP_REQUEST_LENS_INFORMATION = 25
 OP_GET_LENS_INFORMATION = 26
+OP_EXECUTE_FRAMING = 27
+OP_UPDATE_FRAMING_AREA = 28
 OP_GET_COUNTERS = 899
 OP_TEST_CRASH = 900
 
@@ -257,6 +260,28 @@ def _read_exact(stream, count: int, *, allow_eof: bool = False) -> Optional[byte
         chunks.append(chunk)
         remaining -= len(chunk)
     return b"".join(chunks)
+
+
+class FramingArgsStruct(ctypes.Structure):
+    """Framing arguments, sharing the tail slot with the content arguments.
+
+    Which of the two the bytes mean is decided by the operation, exactly as on
+    the host side. Coordinates already carry the vendor's x1024 scaling.
+    """
+
+    _pack_ = 1
+    _fields_ = [
+        ("horizontal_denominator", ctypes.c_int32),
+        ("vertical_denominator", ctypes.c_int32),
+        ("framing_type", ctypes.c_int32),
+        ("area", ctypes.c_uint32),
+        ("group", ctypes.c_uint32),
+        ("x", ctypes.c_int32),
+        ("y", ctypes.c_int32),
+        ("width", ctypes.c_int32),
+        ("height", ctypes.c_int32),
+        ("reserved", ctypes.c_uint32),
+    ]
 
 
 def as_bytes(structure: ctypes.Structure) -> bytes:

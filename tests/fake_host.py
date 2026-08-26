@@ -115,6 +115,8 @@ STATE = {
         0x075F: 0,       # LensVersionNumber
         0x07CB: 0,       # LensSerialNumber
         0x0756: 1,       # LensInformationEnableStatus, Enable
+        0x07D1: 1,       # EframingType, None
+        0x07D2: 100,     # EframingCommandVersion, so framing reports usable
         0x071E: 1,       # Zoom_Operation_Status, Enable
         0x0505: 1,       # Interval_Rec_Mode, Off
         0x0718: 1,       # Interval_Rec_Status, waiting start
@@ -135,6 +137,8 @@ STATE = {
     # The vendor allows one read of the lens table per request, so the fake
     # host models that rather than answering an unrequested read.
     "lens_information_ready": False,
+    "framing_executions": [],
+    "framing_updates": [],
 }
 
 #: Vendor control mode that exposes the content index.
@@ -346,6 +350,12 @@ def handle_request(out, request_id: int, meta: bytes, blob: bytes = b"") -> bool
         _ipc.from_bytes(_ipc.ContentArgsStruct, meta[fixed:])
         if len(meta) >= fixed + _cabi.ctypes.sizeof(_ipc.ContentArgsStruct)
         else _ipc.ContentArgsStruct()
+    )
+    # The same tail slot, read as whichever struct the operation means.
+    framing_args = (
+        _ipc.from_bytes(_ipc.FramingArgsStruct, meta[fixed:])
+        if len(meta) >= fixed + _cabi.ctypes.sizeof(_ipc.FramingArgsStruct)
+        else _ipc.FramingArgsStruct()
     )
 
     if op == _ipc.OP_PING:
@@ -755,6 +765,33 @@ def handle_request(out, request_id: int, meta: bytes, blob: bytes = b"") -> bool
         else:
             encoded = text.encode("utf-8")
             respond(out, request_id, message=encoded, count=len(encoded))
+        return True
+
+    if op == _ipc.OP_EXECUTE_FRAMING:
+        size = _cabi.ctypes.sizeof(_cabi.FramingAreaStruct)
+        if len(blob) % size:
+            respond(out, request_id, status=-4, category=_ipc.CAT_INVALID_ARG,
+                    message=b"framing area payload is not a whole number of areas")
+            return True
+        areas = _ipc.unpack_array(_cabi.FramingAreaStruct, blob, len(blob) // size)
+        STATE["framing_executions"].append({
+            "horizontal_denominator": framing_args.horizontal_denominator,
+            "vertical_denominator": framing_args.vertical_denominator,
+            "framing_type": framing_args.framing_type,
+            "areas": [
+                (a.area, a.group, a.x, a.y, a.width, a.height) for a in areas
+            ],
+        })
+        STATE["properties"][0x07D1] = framing_args.framing_type
+        respond(out, request_id)
+        return True
+
+    if op == _ipc.OP_UPDATE_FRAMING_AREA:
+        STATE["framing_updates"].append((
+            framing_args.area, framing_args.group, framing_args.x,
+            framing_args.y, framing_args.width, framing_args.height,
+        ))
+        respond(out, request_id)
         return True
 
     if op == _ipc.OP_REQUEST_LENS_INFORMATION:

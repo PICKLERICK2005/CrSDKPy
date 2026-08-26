@@ -148,6 +148,11 @@ extern "C" {
 #define CRSDKPY_PREVIEW_THUMBNAIL  1
 #define CRSDKPY_PREVIEW_SCREENNAIL 2
 
+/* CrEFRAMING_AREAINFO_MAX, and the range CrEframingAreaNumber covers. */
+#define CRSDKPY_FRAMING_AREA_MAX 4
+#define CRSDKPY_FRAMING_INPUT_AREA  1
+#define CRSDKPY_FRAMING_OUTPUT_AREA 2
+
 /* Media slot. The vendor numbers these from one. */
 #define CRSDKPY_SLOT_1 1
 #define CRSDKPY_SLOT_2 2
@@ -218,6 +223,21 @@ typedef struct crsdkpy_content {
     uint16_t reserved;
     char     path[256];
 } crsdkpy_content;
+
+/* One framing rectangle, already carrying the vendor's fixed x1024 scaling.
+ *
+ * The scaling is applied above this layer because the vendor states it as a
+ * property of the values, not of the transport, and applying it twice would be
+ * silent nonsense. area is 1..CRSDKPY_FRAMING_AREA_MAX; group is 1 for the
+ * input area and 2 for the output area. */
+typedef struct crsdkpy_framing_area {
+    uint32_t area;
+    uint32_t group;
+    int32_t  x;
+    int32_t  y;
+    int32_t  width;
+    int32_t  height;
+} crsdkpy_framing_area;
 
 /* One row of the lens's focus-distance table.
  *
@@ -361,6 +381,31 @@ CRSDKPY_API int32_t crsdkpy_start_content_download(
 /* Request documented cancellation of the active file transfer. Idempotent
  * when no transfer is active or it has already reached a terminal callback. */
 CRSDKPY_API int32_t crsdkpy_cancel_content_download(uint64_t handle);
+
+/* Apply a complete framing description by absolute position.
+ *
+ * Every coordinate and denominator must already carry the vendor's x1024
+ * scaling. framing_type is a vendor CrEframingType value and is passed through
+ * unchecked, because a firmware may define one this build has never seen.
+ *
+ * The vendor reports the outcome on the extended-warning channel; this return
+ * value only says whether the call was accepted. */
+CRSDKPY_API int32_t crsdkpy_execute_framing(uint64_t handle,
+                                            int32_t horizontal_denominator,
+                                            int32_t vertical_denominator,
+                                            int32_t framing_type,
+                                            const crsdkpy_framing_area* areas,
+                                            uint32_t area_count);
+
+/* Move or resize one already-applied framing area by a relative amount.
+ *
+ * The vendor documents this as enabled only after a successful execute, and as
+ * unable to move a frame on its own. Its parameters are 16-bit, so the scaled
+ * values are range-checked here rather than truncated. */
+CRSDKPY_API int32_t crsdkpy_update_framing_area(uint64_t handle,
+                                                uint32_t area, uint32_t group,
+                                                int32_t x, int32_t y,
+                                                int32_t width, int32_t height);
 
 /* Ask the camera to prepare the lens's focus-distance table.
  *

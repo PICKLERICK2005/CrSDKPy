@@ -171,6 +171,7 @@ void attach_bridge_error(crsdkpy_ipc_response& response)
 // it is appended to the response meta.
 void dispatch(const crsdkpy_ipc_request& request,
               const crsdkpy_ipc_content_args& content,
+              const crsdkpy_ipc_framing_args& framing,
               const std::vector<char>& blob_in,
               crsdkpy_ipc_response& response, std::vector<char>& blob_out,
               std::vector<char>& meta_tail)
@@ -201,6 +202,37 @@ void dispatch(const crsdkpy_ipc_request& request,
 
     case CRSDKPY_OP_CANCEL_CONTENT_DOWNLOAD: {
         const int32_t status = crsdkpy_cancel_content_download(request.handle);
+        fill(response, status, categorise(status), "");
+        if (status != CRSDKPY_OK) attach_bridge_error(response);
+        return;
+    }
+
+    case CRSDKPY_OP_EXECUTE_FRAMING: {
+        const uint32_t count =
+            static_cast<uint32_t>(blob_in.size() / sizeof(crsdkpy_framing_area));
+        if (blob_in.size() % sizeof(crsdkpy_framing_area) != 0) {
+            fill(response, CRSDKPY_ERR_INVALID_ARG, CRSDKPY_CAT_INVALID_ARG,
+                 "framing area payload is not a whole number of areas");
+            return;
+        }
+        std::vector<crsdkpy_framing_area> areas(count);
+        if (count) {
+            std::memcpy(areas.data(), blob_in.data(),
+                        count * sizeof(crsdkpy_framing_area));
+        }
+        const int32_t status = crsdkpy_execute_framing(
+            request.handle, framing.horizontal_denominator,
+            framing.vertical_denominator, framing.framing_type,
+            count ? areas.data() : nullptr, count);
+        fill(response, status, categorise(status), "");
+        if (status != CRSDKPY_OK) attach_bridge_error(response);
+        return;
+    }
+
+    case CRSDKPY_OP_UPDATE_FRAMING_AREA: {
+        const int32_t status = crsdkpy_update_framing_area(
+            request.handle, framing.area, framing.group, framing.x, framing.y,
+            framing.width, framing.height);
         fill(response, status, categorise(status), "");
         if (status != CRSDKPY_OK) attach_bridge_error(response);
         return;
@@ -757,11 +789,18 @@ int main(int argc, char** argv)
         if (meta.size() >= sizeof(request) + sizeof(content)) {
             std::memcpy(&content, meta.data() + sizeof(request), sizeof(content));
         }
+        // The same tail slot, read as whichever struct the operation means.
+        crsdkpy_ipc_framing_args framing;
+        std::memset(&framing, 0, sizeof(framing));
+        if (meta.size() >= sizeof(request) + sizeof(framing)) {
+            std::memcpy(&framing, meta.data() + sizeof(request), sizeof(framing));
+        }
 
         crsdkpy_ipc_response response;
         std::vector<char> out_blob;
         std::vector<char> out_meta_tail;
-        dispatch(request, content, blob, response, out_blob, out_meta_tail);
+        dispatch(request, content, framing, blob, response, out_blob,
+                 out_meta_tail);
 
         std::vector<char> out_meta(sizeof(response) + out_meta_tail.size());
         std::memcpy(out_meta.data(), &response, sizeof(response));

@@ -86,6 +86,7 @@ from .focus import (
     FocusBracketResult,
     FocusDrivingStatus,
 )
+from .framing import Framing, FramingArea, FramingRectangle, FramingType
 from .interval import Interval, IntervalStatus
 from .lens import Lens, LensDistance, LensInformationStatus
 from .liveview import LiveView, LiveViewStats, LiveViewStatus
@@ -168,6 +169,10 @@ __all__ = [
     "ZoomDrivingStatus",
     "ZoomOperationStatus",
     "ZoomTypeStatus",
+    "Framing",
+    "FramingArea",
+    "FramingRectangle",
+    "FramingType",
     "Interval",
     "IntervalStatus",
     "Exposure",

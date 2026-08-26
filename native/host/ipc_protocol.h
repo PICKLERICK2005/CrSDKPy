@@ -91,6 +91,11 @@ extern "C" {
  * read of what it prepared. */
 #define CRSDKPY_OP_REQUEST_LENS_INFORMATION 25
 #define CRSDKPY_OP_GET_LENS_INFORMATION     26
+/* Electronic framing. Two operations because the vendor documents an order
+ * between them: execute applies an absolute description, update nudges one
+ * area and is enabled only after a successful execute. */
+#define CRSDKPY_OP_EXECUTE_FRAMING          27
+#define CRSDKPY_OP_UPDATE_FRAMING_AREA      28
 /* Test-only: makes the host terminate abruptly so process-death handling can
  * be exercised without provoking a real native fault. */
 #define CRSDKPY_OP_TEST_CRASH      900
@@ -183,6 +188,24 @@ typedef struct crsdkpy_ipc_content_args {
     uint32_t reserved;
     uint32_t reserved2;
 } crsdkpy_ipc_content_args;
+
+/* Extra arguments for the framing operations.
+ *
+ * Rides in the same tail slot as the content arguments; the operation decides
+ * which of the two the bytes are. Coordinates already carry the vendor's fixed
+ * x1024 scaling, applied above the transport where the vendor defines it. */
+typedef struct crsdkpy_ipc_framing_args {
+    int32_t  horizontal_denominator;
+    int32_t  vertical_denominator;
+    int32_t  framing_type;
+    uint32_t area;
+    uint32_t group;
+    int32_t  x;
+    int32_t  y;
+    int32_t  width;
+    int32_t  height;
+    uint32_t reserved;
+} crsdkpy_ipc_framing_args;
 
 #pragma pack(pop)
 

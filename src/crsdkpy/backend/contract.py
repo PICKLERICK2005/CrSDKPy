@@ -355,6 +355,29 @@ class Backend:
     ) -> Preview:  # pragma: no cover
         raise NotImplementedError
 
+    # -- framing -----------------------------------------------------------
+    def execute_framing(  # pragma: no cover
+        self, session_id: str, request: Mapping[str, Any]
+    ) -> None:
+        """Apply a complete framing description by absolute position.
+
+        ``request`` carries ``horizontal_denominator``, ``vertical_denominator``
+        and ``framing_type`` as plain integers, plus ``input_areas`` and
+        ``output_areas`` mapping an area number to an ``(x, y, width, height)``
+        tuple. Every coordinate already carries the vendor's fixed scaling.
+        """
+        raise NotImplementedError
+
+    def update_framing_area(  # pragma: no cover
+        self, session_id: str, request: Mapping[str, Any]
+    ) -> None:
+        """Move or resize one already-applied framing area by a relative amount.
+
+        ``request`` carries ``area``, ``group`` and the scaled ``x``, ``y``,
+        ``width`` and ``height`` deltas.
+        """
+        raise NotImplementedError
+
     # -- lens --------------------------------------------------------------
     def request_lens_information(self, session_id: str) -> None:  # pragma: no cover
         """Ask the camera to prepare the lens's focus-distance table.

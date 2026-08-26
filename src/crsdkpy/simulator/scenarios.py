@@ -131,6 +131,9 @@ class Scenario:
     #: lens on the reference body looked like.
     zoom_operation_enabled: bool = True
 
+    # -- framing -----------------------------------------------------------
+    #: Refuse the framing operations with a vendor error.
+    framing_execute_fails: bool = False
 
     def replace(self, **changes: object) -> Scenario:
         """Return a copy with *changes* applied."""
@@ -163,6 +166,7 @@ SCENARIOS: dict[str, Scenario] = {
             lens_distance_rows=6,
         ),
         Scenario(name="zoom_not_operable", zoom_operation_enabled=False),
+        Scenario(name="framing_refused", framing_execute_fails=True),
         Scenario(
             name="lens_request_refused",
             lens_information_enabled=True,

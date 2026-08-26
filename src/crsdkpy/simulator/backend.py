@@ -150,6 +150,9 @@ class _Session:
 
         #: Set by a request, cleared by the single read the vendor allows.
         self.lens_information_ready = False
+        #: Framing descriptions the session has applied, newest last.
+        self.framing_executions: list[dict[str, Any]] = []
+        self.framing_updates: list[dict[str, Any]] = []
 
         self.recording = RecordingState.IDLE
         self.postview_configured = False
@@ -233,6 +236,14 @@ class _Session:
         if code in (P.CODE_ZOOM_POSITION_SETTING,
                     P.CODE_ZOOM_POSITION_CURRENT_VALUE):
             return 16_384
+        if code == P.CODE_CAMERA_EFRAMING:
+            return 1                       # Off
+        if code == P.CODE_EFRAMING_TYPE:
+            return 1                       # None
+        if code == P.CODE_EFRAMING_COMMAND_VERSION:
+            return 100
+        if code in (P.CODE_EFRAMING_RECORDING_IMAGE_CROP, P.CODE_EFRAMING_HDMI_CROP):
+            return 1                       # Off
         if code == P.CODE_INTERVAL_REC_MODE:
             return 1                       # Off
         if code == P.CODE_INTERVAL_REC_STATUS:
@@ -1334,6 +1345,37 @@ class SimulatedBackend(Backend):
         self._schedule_reconnect(session, self._clock.now_ms() + delay_ms)
 
     # -- extension point ---------------------------------------------------
+    # -- framing -----------------------------------------------------------
+    def execute_framing(self, session_id: str, request: Mapping[str, Any]) -> None:
+        session = self._live_session(session_id, "execute_framing")
+        if session.scenario.framing_execute_fails:
+            raise CameraConnectionError(
+                "the camera rejected the framing request",
+                operation="execute_framing",
+                backend_code=0x8400,
+            )
+        session.framing_executions.append(dict(request))
+        # The camera reports the applied type back through the property.
+        session.properties[P.CODE_EFRAMING_TYPE] = int(request["framing_type"])
+        session.ready.append(
+            PropertyChangedEvent(
+                timestamp_ms=self._clock.now_ms(),
+                codes=(PropertyCode(P.CODE_EFRAMING_TYPE),),
+            )
+        )
+
+    def update_framing_area(
+        self, session_id: str, request: Mapping[str, Any]
+    ) -> None:
+        session = self._live_session(session_id, "update_framing_area")
+        if session.scenario.framing_execute_fails:
+            raise CameraConnectionError(
+                "the camera rejected the framing area update",
+                operation="update_framing_area",
+                backend_code=0x8400,
+            )
+        session.framing_updates.append(dict(request))
+
     # -- lens --------------------------------------------------------------
     def request_lens_information(self, session_id: str) -> None:
         session = self._live_session(session_id, "request_lens_information")

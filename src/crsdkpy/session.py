@@ -42,6 +42,7 @@ from .events import (
     FocusSource,
 )
 from .focus import Focus
+from .framing import Framing
 from .interval import Interval
 from .lens import Lens
 from .liveview import LiveView
@@ -158,6 +159,7 @@ class Session:
         self.focus = Focus(self)
         self.lens = Lens(self)
         self.zoom = Zoom(self)
+        self.framing = Framing(self)
         self.interval = Interval(self)
         self.live_view = LiveView(self)
         self.video = Video(self)

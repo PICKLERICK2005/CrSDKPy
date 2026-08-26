@@ -112,6 +112,11 @@ PREVIEW_SCREENNAIL = 2
 SLOT_1 = 1
 SLOT_2 = 2
 
+# Framing area groups, mirroring the header.
+FRAMING_INPUT_AREA = 1
+FRAMING_OUTPUT_AREA = 2
+FRAMING_AREA_MAX = 4
+
 # Vendor CrLensInformationType. Zero is the vendor's own "undefined".
 LENS_INFO_UNDEFINED = 0
 LENS_INFO_FEET = 1
@@ -165,6 +170,19 @@ class ContentStruct(ctypes.Structure):
         ("created_millisecond", c_uint16),
         ("reserved", c_uint16),
         ("path", c_char * 256),
+    ]
+
+
+class FramingAreaStruct(ctypes.Structure):
+    """One framing rectangle, already carrying the vendor's x1024 scaling."""
+
+    _fields_ = [
+        ("area", c_uint32),
+        ("group", c_uint32),
+        ("x", c_int32),
+        ("y", c_int32),
+        ("width", c_int32),
+        ("height", c_int32),
     ]
 
 
@@ -398,6 +416,21 @@ def _declare(lib: ctypes.CDLL) -> None:
 
     lib.crsdkpy_cancel_content_download.restype = c_int32
     lib.crsdkpy_cancel_content_download.argtypes = [c_uint64]
+
+    lib.crsdkpy_execute_framing.restype = c_int32
+    lib.crsdkpy_execute_framing.argtypes = [
+        c_uint64,
+        c_int32,
+        c_int32,
+        c_int32,
+        POINTER(FramingAreaStruct),
+        c_uint32,
+    ]
+
+    lib.crsdkpy_update_framing_area.restype = c_int32
+    lib.crsdkpy_update_framing_area.argtypes = [
+        c_uint64, c_uint32, c_uint32, c_int32, c_int32, c_int32, c_int32
+    ]
 
     lib.crsdkpy_request_lens_information.restype = c_int32
     lib.crsdkpy_request_lens_information.argtypes = [c_uint64]

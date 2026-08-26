@@ -891,6 +891,28 @@ def decode_property(raw: _cabi.PropertyStruct) -> Property:
     )
 
 
+def build_framing_areas(request: Mapping[str, Any]) -> list[_cabi.FramingAreaStruct]:
+    """Flatten the input and output area maps into the ABI's flat array."""
+    areas: list[_cabi.FramingAreaStruct] = []
+    for key, group in (
+        ("input_areas", _cabi.FRAMING_INPUT_AREA),
+        ("output_areas", _cabi.FRAMING_OUTPUT_AREA),
+    ):
+        for number, rectangle in sorted((request.get(key) or {}).items()):
+            x, y, width, height = rectangle
+            areas.append(
+                _cabi.FramingAreaStruct(
+                    area=int(number),
+                    group=group,
+                    x=int(x),
+                    y=int(y),
+                    width=int(width),
+                    height=int(height),
+                )
+            )
+    return areas
+
+
 def decode_lens_row(raw: _cabi.LensInfoStruct) -> LensDistanceRow:
     return LensDistanceRow(
         info_type=int(raw.info_type),
@@ -1158,6 +1180,42 @@ class NativeBackend(
             self._lib,
             self._lib.crsdkpy_set_property(handle, int(code), int(value)),
             "set_property",
+        )
+
+    # -- framing -----------------------------------------------------------
+    def execute_framing(self, session_id: str, request: Mapping[str, Any]) -> None:
+        handle = self._handle(session_id, "execute_framing")
+        areas = build_framing_areas(request)
+        buffer = (_cabi.FramingAreaStruct * len(areas))(*areas) if areas else None
+        _cabi.check(
+            self._lib,
+            self._lib.crsdkpy_execute_framing(
+                handle,
+                int(request["horizontal_denominator"]),
+                int(request["vertical_denominator"]),
+                int(request["framing_type"]),
+                buffer,
+                len(areas),
+            ),
+            "execute_framing",
+        )
+
+    def update_framing_area(
+        self, session_id: str, request: Mapping[str, Any]
+    ) -> None:
+        handle = self._handle(session_id, "update_framing_area")
+        _cabi.check(
+            self._lib,
+            self._lib.crsdkpy_update_framing_area(
+                handle,
+                int(request["area"]),
+                int(request["group"]),
+                int(request["x"]),
+                int(request["y"]),
+                int(request["width"]),
+                int(request["height"]),
+            ),
+            "update_framing_area",
         )
 
     # -- lens --------------------------------------------------------------

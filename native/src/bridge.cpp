@@ -1631,6 +1631,97 @@ int32_t crsdkpy_set_property(uint64_t handle, uint32_t code, int64_t value)
     return CRSDKPY_OK;
 }
 
+int32_t crsdkpy_execute_framing(uint64_t handle, int32_t horizontal_denominator,
+                                int32_t vertical_denominator, int32_t framing_type,
+                                const crsdkpy_framing_area* areas,
+                                uint32_t area_count)
+{
+    set_error("");
+    if (area_count > 0 && !areas) return CRSDKPY_ERR_INVALID_ARG;
+    std::lock_guard<std::mutex> lock(g_mutex);
+    auto session = resolve(handle);
+    if (!session) return CRSDKPY_ERR_INVALID_HANDLE;
+    if (session->state() != CRSDKPY_STATE_CONNECTED) return CRSDKPY_ERR_NOT_CONNECTED;
+
+    // The vendor's framing description is a C++ object holding two maps, so it
+    // is assembled here from plain data rather than being handed across the
+    // ABI. Nothing the vendor owns leaves this function.
+    SDK::CrEframingInfo info;
+    info.horizontal_denominator = horizontal_denominator;
+    info.vertical_denominator = vertical_denominator;
+    info.eframingType = static_cast<SDK::CrEframingType>(framing_type);
+
+    for (uint32_t i = 0; i < area_count; ++i) {
+        const crsdkpy_framing_area& source = areas[i];
+        if (source.area < 1 || source.area > CRSDKPY_FRAMING_AREA_MAX) {
+            set_error("framing area number is outside the vendor's range");
+            return CRSDKPY_ERR_INVALID_ARG;
+        }
+        SDK::CrEframingRectangle rectangle;
+        rectangle.x = source.x;
+        rectangle.y = source.y;
+        rectangle.width = source.width;
+        rectangle.height = source.height;
+        if (source.group == CRSDKPY_FRAMING_INPUT_AREA) {
+            info.addInputInfo(source.area, rectangle);
+        } else if (source.group == CRSDKPY_FRAMING_OUTPUT_AREA) {
+            info.addOutputInfo(source.area, rectangle);
+        } else {
+            set_error("framing area group must be the input or output area");
+            return CRSDKPY_ERR_INVALID_ARG;
+        }
+    }
+
+    const auto error = SDK::ExecuteEframing(session->handle(), &info);
+    if (error != SDK::CrError_None) {
+        set_error("the camera rejected the framing request");
+        return static_cast<int32_t>(error);
+    }
+    return CRSDKPY_OK;
+}
+
+int32_t crsdkpy_update_framing_area(uint64_t handle, uint32_t area, uint32_t group,
+                                    int32_t x, int32_t y, int32_t width,
+                                    int32_t height)
+{
+    set_error("");
+    if (area < 1 || area > CRSDKPY_FRAMING_AREA_MAX) {
+        set_error("framing area number is outside the vendor's range");
+        return CRSDKPY_ERR_INVALID_ARG;
+    }
+    if (group != CRSDKPY_FRAMING_INPUT_AREA &&
+        group != CRSDKPY_FRAMING_OUTPUT_AREA) {
+        set_error("framing area group must be the input or output area");
+        return CRSDKPY_ERR_INVALID_ARG;
+    }
+    // The vendor's parameters are 16-bit and its own sample truncates into
+    // them. Sending a different rectangle than the caller asked for would be
+    // worse than refusing, so a value that does not fit is refused.
+    const int32_t deltas[4] = {x, y, width, height};
+    for (int i = 0; i < 4; ++i) {
+        if (deltas[i] < -32768 || deltas[i] > 32767) {
+            set_error("a framing delta does not fit the vendor's 16-bit parameter");
+            return CRSDKPY_ERR_INVALID_ARG;
+        }
+    }
+
+    std::lock_guard<std::mutex> lock(g_mutex);
+    auto session = resolve(handle);
+    if (!session) return CRSDKPY_ERR_INVALID_HANDLE;
+    if (session->state() != CRSDKPY_STATE_CONNECTED) return CRSDKPY_ERR_NOT_CONNECTED;
+
+    const auto error = SDK::UpdateEframingArea(
+        session->handle(), static_cast<SDK::CrEframingAreaNumber>(area),
+        static_cast<SDK::CrEframingAreaGroup>(group),
+        static_cast<CrInt16>(x), static_cast<CrInt16>(y),
+        static_cast<CrInt16>(width), static_cast<CrInt16>(height));
+    if (error != SDK::CrError_None) {
+        set_error("the camera rejected the framing area update");
+        return static_cast<int32_t>(error);
+    }
+    return CRSDKPY_OK;
+}
+
 int32_t crsdkpy_request_lens_information(uint64_t handle)
 {
     set_error("");

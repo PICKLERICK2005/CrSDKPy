@@ -276,6 +276,32 @@ A drive is refused when the camera does not currently allow one, rather than
 sent for the camera to ignore. Scale, digital scale and focal distance stay in
 the camera's own units: `scale` counts in thousandths, so `1200` is x1.2.
 
+### Electronic framing
+
+The one family here with real operations, and the vendor documents an order
+between them — a relative update is enabled only after a successful execute
+and cannot move a frame on its own:
+
+```python
+from crsdkpy import FramingArea, FramingRectangle, FramingType
+
+session.framing.available                  # the camera says it is executable
+session.framing.execute(
+    horizontal_denominator=640,
+    vertical_denominator=480,
+    framing_type=FramingType.AUTO,
+    input_areas={1: FramingRectangle(1, 1, 640, 480)},
+    output_areas={1: FramingRectangle(0, 0, 640, 480)},
+)
+session.framing.update_area(1, FramingArea.INPUT, x=10, y=-10)
+```
+
+Coordinates are plain numbers. The vendor states that every coordinate and
+denominator is multiplied by 1024 on the wire, so that is applied for you —
+and a value that would not survive the vendor's narrower relative-update
+parameter is refused rather than silently truncated, which is what its own
+sample does. Nothing here infers crop or aspect behaviour from a property name.
+
 ### Interval shooting
 
 The camera owns the sequence. There is no start or stop operation in the vendor

@@ -41,6 +41,7 @@ architecture rather than adding a second backend.
 | Lens identity (model, version, serial) | yes | yes | **yes** ¹² |
 | Lens focus-distance table (request / read / release) | yes | yes | no ¹³ |
 | Zoom state, drive and absolute position | yes | yes | no ¹⁴ |
+| Electronic framing (execute, relative update) | yes | yes | no |
 | Interval (still) shooting settings and status | yes | yes | no |
 | Still transfer size (Original / SmallSize) | yes | yes | no ¹⁵ |
 | Event stream | yes | yes | **yes** |

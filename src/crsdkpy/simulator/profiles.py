@@ -88,6 +88,12 @@ CODE_ZOOM_SPEED_RANGE = 0x0724
 CODE_ZOOM_DRIVING_STATUS = 0x0792
 CODE_ZOOM_POSITION_CURRENT_VALUE = 0x07A1
 
+# Electronic framing. The command version doubles as the availability gate.
+CODE_EFRAMING_RECORDING_IMAGE_CROP = 0x01F0
+CODE_EFRAMING_HDMI_CROP = 0x01F1
+CODE_CAMERA_EFRAMING = 0x01F2
+CODE_EFRAMING_TYPE = 0x07D1
+CODE_EFRAMING_COMMAND_VERSION = 0x07D2
 
 # Interval (still) shooting. The camera owns the sequence.
 CODE_INTERVAL_START_TIME = 0x01FC
@@ -270,6 +276,11 @@ def _base_properties() -> tuple[int, ...]:
         CODE_ZOOM_SPEED_RANGE,
         CODE_ZOOM_DRIVING_STATUS,
         CODE_ZOOM_POSITION_CURRENT_VALUE,
+        CODE_EFRAMING_RECORDING_IMAGE_CROP,
+        CODE_EFRAMING_HDMI_CROP,
+        CODE_CAMERA_EFRAMING,
+        CODE_EFRAMING_TYPE,
+        CODE_EFRAMING_COMMAND_VERSION,
         CODE_INTERVAL_START_TIME,
         CODE_INTERVAL_SHOOTING_INTERVAL,
         CODE_INTERVAL_PRIORITY,
@@ -294,7 +305,8 @@ def build_property(code: int, value: object) -> Property:
                 CODE_ZOOM_OPERATION_STATUS, CODE_ZOOM_TYPE_STATUS,
                 CODE_ZOOM_SPEED_RANGE, CODE_ZOOM_DRIVING_STATUS,
                 CODE_ZOOM_BAR_INFORMATION, CODE_ZOOM_POSITION_CURRENT_VALUE,
-                CODE_INTERVAL_REC_STATUS):
+                CODE_EFRAMING_TYPE, CODE_EFRAMING_COMMAND_VERSION,
+                CODE_CAMERA_EFRAMING, CODE_INTERVAL_REC_STATUS):
         access = PropertyAccess.READ_ONLY
     # The zoom drive is a write-only property on the reference body.
     if code == CODE_ZOOM_OPERATION:
@@ -352,6 +364,8 @@ def build_property(code: int, value: object) -> Property:
         allowed = (1, 2, 3, 4)
     if code == CODE_INTERVAL_SHUTTER_TYPE:
         allowed = (1, 2, 3)
+    if code in (CODE_EFRAMING_RECORDING_IMAGE_CROP, CODE_EFRAMING_HDMI_CROP):
+        allowed = (1, 2)
     # Lens identity answers through the string accessor, as on real hardware.
     if code in (CODE_LENS_MODEL_NAME, CODE_LENS_VERSION_NUMBER,
                 CODE_LENS_SERIAL_NUMBER):

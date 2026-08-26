@@ -24,7 +24,7 @@ import subprocess
 import sys
 import tempfile
 import threading
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from typing import Any, Optional
 
@@ -73,6 +73,7 @@ from .native import (
     ShutterStageMixin,
     VideoStageMixin,
     build_content_preview,
+    build_framing_areas,
     build_live_view_frame,
     build_postview,
     command_to_abi,
@@ -858,6 +859,43 @@ class HostBackend(
             u32=command_to_abi(command),
             i32=parameter_to_abi(parameter),
             operation="send_command",
+        )
+
+    # -- framing -----------------------------------------------------------
+    def execute_framing(self, session_id: str, request: Mapping[str, Any]) -> None:
+        handle = self._handle(session_id, "execute_framing")
+        args = _ipc.FramingArgsStruct(
+            horizontal_denominator=int(request["horizontal_denominator"]),
+            vertical_denominator=int(request["vertical_denominator"]),
+            framing_type=int(request["framing_type"]),
+        )
+        areas = build_framing_areas(request)
+        blob = b"".join(_ipc.as_bytes(area) for area in areas)
+        self._call_ex(
+            _ipc.OP_EXECUTE_FRAMING,
+            handle=handle,
+            extra=_ipc.as_bytes(args),
+            blob=blob,
+            operation="execute_framing",
+        )
+
+    def update_framing_area(
+        self, session_id: str, request: Mapping[str, Any]
+    ) -> None:
+        handle = self._handle(session_id, "update_framing_area")
+        args = _ipc.FramingArgsStruct(
+            area=int(request["area"]),
+            group=int(request["group"]),
+            x=int(request["x"]),
+            y=int(request["y"]),
+            width=int(request["width"]),
+            height=int(request["height"]),
+        )
+        self._call_ex(
+            _ipc.OP_UPDATE_FRAMING_AREA,
+            handle=handle,
+            extra=_ipc.as_bytes(args),
+            operation="update_framing_area",
         )
 
     # -- lens --------------------------------------------------------------
