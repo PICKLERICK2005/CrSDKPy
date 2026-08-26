@@ -208,9 +208,24 @@ are absent from `allowed_values`; advertised constraints govern requested
 writes only. A `values_undecoded` setting remains readable but reports that
 trustworthy client-side validation is unavailable.
 
-Unless a conversion is explicitly documented, values use Sony CRSDK's raw
-property representation. In particular, CrSDKPy does not guess seconds,
-f-stops, EV, Kelvin, or physical units from numeric codes.
+Values are Sony CRSDK's raw property representation. CrSDKPy does not guess
+seconds, f-stops, EV, Kelvin, or physical units from numeric codes — but where
+the vendor documents an encoding, that encoding is the contract:
+
+| Setting | Vendor encoding |
+| --- | --- |
+| `f_number` | F-number x 100, so `280` is F2.8. `0xFFFD` iris closed, `0xFFFE` unknown, `0xFFFF` nothing to display. |
+| `compensation` | Signed EV x 1000, so `-700` is -0.7 EV. |
+| `shutter_speed` | Upper 16 bits numerator, lower 16 bits denominator, so `0x000103E8` is 1/1000. `0` is bulb, `0xFFFFFFFF` nothing to display. |
+| `iso` | Bits 0-23 the ISO value, bits 24-27 the mode, bits 28-31 the extension flag. A value of `0xFFFFFF` is ISO AUTO. |
+| `program`, `white_balance.mode`, `drive.mode` | Vendor enumerations, listed in the CRSDK API reference. |
+
+Writability follows camera state rather than model: the vendor documents
+`f_number` as settable in exposure modes M and A and read-only in P and S, and
+that is what `writable` reports. Writing `program` changes what the other
+settings accept, and the vendor asks for 500 ms after that write before setting
+a shooting parameter such as `shutter_speed`. A write is asynchronous — the
+camera reports the new value through the event stream, not through `set()`.
 
 ### Raw escape hatch
 

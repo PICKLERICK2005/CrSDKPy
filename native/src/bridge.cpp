@@ -258,6 +258,57 @@ int32_t map_value_type(SDK::CrDataType type)
     }
 }
 
+// Width in bytes of one element of a vendor data type, or 0 when the base type
+// is not one this bridge decodes. The array, range and sign bits are masked
+// off: only the base type decides the width.
+uint32_t element_width(SDK::CrDataType type)
+{
+    switch (type & 0x0FFF) {
+    case SDK::CrDataType_UInt8:  return 1;
+    case SDK::CrDataType_UInt16: return 2;
+    case SDK::CrDataType_UInt32: return 4;
+    case SDK::CrDataType_UInt64: return 8;
+    default: return 0;
+    }
+}
+
+// Number of options in an advertised value set.
+//
+// The vendor reports the set's size in bytes, not in elements, so the count is
+// the byte size divided by the width of the property's own data type. A fixed
+// divisor is wrong for every property that is not 16-bit: a 32-bit set such as
+// IsoSensitivity or DriveMode would be reported at twice its real length.
+uint32_t advertised_count(const SDK::CrDeviceProperty& property)
+{
+    const uint32_t width = element_width(property.GetValueType());
+    return width ? property.GetValueSize() / width : 0;
+}
+
+// A property's current value, narrowed to the width the vendor declared.
+//
+// Every current value arrives in a 64-bit field, but only the low bits of the
+// declared type carry meaning. Narrowing is not cosmetic: for a signed type it
+// is what recovers the sign, so an exposure compensation of -0.7Ev reads as
+// -700 rather than as 64836. A width this bridge does not decode is passed
+// through untouched rather than truncated on a guess.
+int64_t narrow_current_value(SDK::CrDataType type, CrInt64u value)
+{
+    const bool is_signed = (type & SDK::CrDataType_SignBit) != 0;
+    switch (element_width(type)) {
+    case 1:
+        return is_signed ? static_cast<int64_t>(static_cast<int8_t>(value))
+                         : static_cast<int64_t>(static_cast<uint8_t>(value));
+    case 2:
+        return is_signed ? static_cast<int64_t>(static_cast<int16_t>(value))
+                         : static_cast<int64_t>(static_cast<uint16_t>(value));
+    case 4:
+        return is_signed ? static_cast<int64_t>(static_cast<int32_t>(value))
+                         : static_cast<int64_t>(static_cast<uint32_t>(value));
+    default:
+        return static_cast<int64_t>(value);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // RAII wrappers over vendor objects
 // ---------------------------------------------------------------------------
@@ -1347,10 +1398,11 @@ int32_t crsdkpy_list_properties(uint64_t handle, crsdkpy_property* out,
         crsdkpy_property& target = out[i];
         std::memset(&target, 0, sizeof(target));
         target.code = source.GetCode();
-        target.value = static_cast<int64_t>(source.GetCurrentValue());
+        target.value =
+            narrow_current_value(source.GetValueType(), source.GetCurrentValue());
         target.value_type = map_value_type(source.GetValueType());
         target.access = map_access(source);
-        target.allowed_count = source.GetValueSize() / 2;
+        target.allowed_count = advertised_count(source);
     }
     return CRSDKPY_OK;
 }
@@ -1380,26 +1432,14 @@ int32_t crsdkpy_get_property(uint64_t handle, uint32_t code, crsdkpy_property* o
 
     std::memset(out, 0, sizeof(*out));
     out->code = raw[0].GetCode();
-    out->value = static_cast<int64_t>(raw[0].GetCurrentValue());
+    out->value =
+        narrow_current_value(raw[0].GetValueType(), raw[0].GetCurrentValue());
     out->value_type = map_value_type(raw[0].GetValueType());
     out->access = map_access(raw[0]);
-    out->allowed_count = raw[0].GetValueSize() / 2;
+    out->allowed_count = advertised_count(raw[0]);
     return CRSDKPY_OK;
 }
 
-
-// Width in bytes of one element of a vendor data type, or 0 when the base type
-// is not one this bridge decodes.
-static uint32_t element_width(SDK::CrDataType type)
-{
-    switch (type & 0x0FFF) {
-    case SDK::CrDataType_UInt8:  return 1;
-    case SDK::CrDataType_UInt16: return 2;
-    case SDK::CrDataType_UInt32: return 4;
-    case SDK::CrDataType_UInt64: return 8;
-    default: return 0;
-    }
-}
 
 // Reads one element, sign-extending when the vendor says the type is signed.
 static int64_t read_element(const uint8_t* data, uint32_t width, bool is_signed)

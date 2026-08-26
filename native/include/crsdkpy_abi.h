@@ -177,8 +177,14 @@ typedef struct crsdkpy_property {
     int32_t  value_type;
     int32_t  access;
     int32_t  reserved;
-    int64_t  value;          /* meaningful when value_type is INT */
-    uint32_t allowed_count;  /* number of permitted values available */
+    /* The vendor's current value, narrowed to the width of the property's own
+     * data type and sign-extended when that type is signed. Meaningful when
+     * value_type is INT; a STRING property answers through the string call. */
+    int64_t  value;
+    /* Number of permitted values the camera advertises. The vendor reports the
+     * set's size in bytes, so this is that size divided by the element width of
+     * the property's data type, and 0 for a type this bridge does not decode. */
+    uint32_t allowed_count;
     uint32_t reserved2;
 } crsdkpy_property;
 

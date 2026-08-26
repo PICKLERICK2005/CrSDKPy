@@ -116,3 +116,80 @@ def test_a_range_type_with_the_wrong_element_count_is_left_raw() -> None:
 def test_an_unknown_base_type_is_left_raw() -> None:
     shape, _ = decode(RANGE_BIT | 0x0FFF, b"\x01\x02\x03\x04\x05\x06")
     assert shape == "raw"
+
+
+def narrow(data_type: int, value: int) -> int:
+    """The bridge's rule for a property's current value.
+
+    Every current value arrives in a 64-bit field, but only the low bits of the
+    declared type carry meaning, so it is narrowed to that width and
+    sign-extended when the vendor says the type is signed.
+    """
+    width = WIDTHS.get(data_type & 0x0FFF, 0)
+    if width == 0 or width == 8:
+        return value
+    masked = value & ((1 << (8 * width)) - 1)
+    if data_type & SIGN_BIT and masked >> (8 * width - 1):
+        masked -= 1 << (8 * width)
+    return masked
+
+
+def test_the_option_count_comes_from_the_element_width() -> None:
+    """The advertised size is a byte count, not an element count.
+
+    Dividing it by a fixed two bytes reads every 32-bit property at twice its
+    real length, so the divisor has to be the width the vendor declared.
+    """
+    for entry in load():
+        blob = bytes.fromhex(entry["values_hex"])
+        width = WIDTHS[entry["data_type"] & 0x0FFF]
+        _, values = decode(entry["data_type"], blob)
+        assert len(values) == entry["value_size"] // width
+
+    by_code = {e["code"]: e for e in load()}
+    # Two 32-bit sets a real body reported, where a fixed divisor is wrong.
+    iso = by_code["0x0104"]
+    _, iso_values = decode(iso["data_type"], bytes.fromhex(iso["values_hex"]))
+    assert len(iso_values) == 24 and iso["value_size"] // 2 == 48
+
+    drive = by_code["0x010E"]
+    _, drive_values = decode(drive["data_type"], bytes.fromhex(drive["values_hex"]))
+    assert len(drive_values) == 14 and drive["value_size"] // 2 == 28
+
+
+def test_a_current_value_is_narrowed_to_the_width_the_vendor_declared() -> None:
+    """A signed property's current value is only negative once narrowed.
+
+    Exposure compensation is a signed 16-bit property carrying EV times 1000,
+    so -0.7Ev is 0xFD44. Read out of the 64-bit field without narrowing it is
+    64836, which is not a value the camera would ever offer.
+    """
+    signed16 = SIGN_BIT | ARRAY_BIT | 0x0002
+    assert narrow(signed16, 0xFD44) == -700
+    assert narrow(signed16, 0xEC78) == -5000  # the vendor's own -5.0Ev example
+    assert narrow(signed16, 0x1388) == 5000
+    assert narrow(signed16, 0) == 0
+
+    # An unsigned property keeps every documented sentinel intact.
+    unsigned16 = ARRAY_BIT | 0x0002
+    assert narrow(unsigned16, 0xFFFF) == 0xFFFF  # CrFnumber_Nothing
+    assert narrow(unsigned16, 0xFFFD) == 0xFFFD  # CrFnumber_IrisClose
+    assert narrow(unsigned16, 280) == 280        # F2.8
+
+    unsigned32 = ARRAY_BIT | 0x0003
+    assert narrow(unsigned32, 0xFFFFFFFF) == 0xFFFFFFFF  # CrShutterSpeed_Nothing
+    assert narrow(unsigned32, 0x000103E8) == 0x000103E8  # 1/1000
+    assert narrow(unsigned32, 0x00FFFFFF) == 0x00FFFFFF  # CrISO_AUTO
+
+
+def test_narrowing_never_reinterprets_a_value_the_camera_can_offer() -> None:
+    """Every advertised option survives a round trip through the narrowing.
+
+    The two paths have to agree: a value read as current must be comparable to
+    the values the same property advertises, or nothing can validate a write.
+    """
+    for entry in load():
+        blob = bytes.fromhex(entry["values_hex"])
+        _, values = decode(entry["data_type"], blob)
+        for value in values:
+            assert narrow(entry["data_type"], value) == value
