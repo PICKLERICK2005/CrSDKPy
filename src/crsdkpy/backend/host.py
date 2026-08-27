@@ -402,7 +402,8 @@ class HostBackend(
         if ack.abi_major != _cabi.ABI_VERSION_MAJOR:
             raise NativeBackendError(
                 f"host was built against C ABI major {ack.abi_major}, this build "
-                f"expects {_cabi.ABI_VERSION_MAJOR}. Rebuild the host.",
+                f"expects {_cabi.ABI_VERSION_MAJOR}. Rebuild the host from "
+                "this checkout.",
                 operation="host.handshake",
             )
         if ack.abi_minor < _cabi.ABI_VERSION_MINOR:
