@@ -49,6 +49,7 @@ from .conformance import (
     reference_profile,
 )
 from .content import Content
+from .diagnostics import RuntimeStaging, describe_runtime_staging, diagnose
 from .enums import (
     CaptureState,
     ConnectionState,
@@ -187,6 +188,9 @@ __all__ = [
     "FramingType",
     "Interval",
     "IntervalStatus",
+    "diagnose",
+    "describe_runtime_staging",
+    "RuntimeStaging",
     "ConformanceProfile",
     "ConformanceReport",
     "Finding",

@@ -30,6 +30,7 @@ from typing import Any, Optional
 
 from ..capabilities import SessionCapabilities
 from ..clock import Clock, RealClock
+from ..diagnostics import describe_runtime_staging
 from ..enums import (
     ConnectionState,
     PreviewKind,
@@ -125,6 +126,31 @@ _RECONNECT_TO_ABI = {
     ReconnectPolicy.BOUNDED: 0,
     ReconnectPolicy.VENDOR: 1,
 }
+
+
+#: Usable bytes in the request struct's fixed text field, leaving room for the
+#: terminator the host relies on.
+_TEXT_CAPACITY = 207
+
+
+def _encode_text(text: str, operation: str) -> bytes:
+    """Encode a path or key for the fixed-size request field.
+
+    Refuses rather than truncates. The field carries adapter directories and
+    device keys, and half of either is not a smaller version of it -- a
+    silently shortened path sends the vendor SDK somewhere that does not
+    exist, and cutting UTF-8 at a byte boundary can also split a character and
+    produce a sequence the bridge will reject as invalid.
+    """
+    encoded = text.encode("utf-8")
+    if len(encoded) > _TEXT_CAPACITY:
+        raise BackendError(
+            f"{text!r} is {len(encoded)} bytes as UTF-8 and the protocol field "
+            f"holds {_TEXT_CAPACITY}; move the vendor runtime somewhere with a "
+            "shorter path, or point CRSDKPY_HOST at a host beside it",
+            operation=operation,
+        )
+    return encoded
 
 
 def resolve_save_directory(explicit: Optional[str] = None) -> str:
@@ -240,6 +266,7 @@ class HostBackend(
         self._save_directory = resolve_save_directory(save_directory)
 
         self._process: Optional[subprocess.Popen] = None
+        self._stderr = None
         self._state = HostState.NOT_STARTED
         self._lock = threading.RLock()
         self._request_id = 0
@@ -275,17 +302,23 @@ class HostBackend(
             if self._state == HostState.READY:
                 return
             self._state = HostState.STARTING
+            self._require_runtime_staging()
             try:
                 # The save directory is passed explicitly rather than left to
                 # inheritance, so the resolved policy is what the host sees
                 # even when the parent's environment says something else.
                 child_env = dict(os.environ)
                 child_env[SAVE_DIR_ENV_VAR] = self._save_directory
+                # stderr goes to a temporary file, not a pipe and not away.
+                # A pipe nobody drains deadlocks a chatty child, and throwing
+                # it away is how "the host exited with code 3221225781" ends up
+                # being the whole diagnosis for a missing vendor DLL.
+                self._stderr = tempfile.TemporaryFile(prefix="crsdkpy-host-")
                 self._process = subprocess.Popen(
                     self._command or [self._host_path],
                     stdin=subprocess.PIPE,
                     stdout=subprocess.PIPE,
-                    stderr=subprocess.DEVNULL,
+                    stderr=self._stderr,
                     cwd=self._adapter_dir,
                     close_fds=True,
                     env=child_env,
@@ -309,6 +342,28 @@ class HostBackend(
                 self._terminate()
                 raise
             self._state = HostState.READY
+
+    def _require_runtime_staging(self) -> None:
+        """Refuse to launch when the vendor runtime is not where it must be.
+
+        Checked before the process starts, because afterwards the evidence is
+        an exit code. A host that cannot load the Sony runtime dies during the
+        handshake, and on Windows it does so without saying anything at all --
+        so the actionable message has to come from here.
+
+        Skipped when the caller supplied its own argv: that is the test host,
+        which has no vendor runtime by design.
+        """
+        if self._command is not None:
+            return
+        staging = describe_runtime_staging(self._adapter_dir)
+        if staging.complete:
+            return
+        raise SDKNotFoundError(
+            staging.explain()
+            + f" CrSDKPy looked beside the host executable at {self._host_path}.",
+            operation="host.start",
+        )
 
     def _do_handshake(self) -> None:
         hello = _ipc.HelloStruct(
@@ -398,6 +453,61 @@ class HostBackend(
         self._process = None
         self._handles.clear()
         self._modes.clear()
+        self._close_stderr()
+
+    def _close_stderr(self) -> None:
+        handle, self._stderr = self._stderr, None
+        try:
+            if handle:
+                handle.close()
+        except Exception:  # pragma: no cover - best effort
+            pass
+
+    def host_stderr(self, limit: int = 2000) -> str:
+        """Whatever the host wrote to stderr, newest-relevant last.
+
+        Empty when the host said nothing, which is the ordinary case: stdout
+        carries the protocol and the host redirects its own C-level stdout away
+        from it, so stderr is where a loader failure or a vendor diagnostic
+        actually lands.
+        """
+        handle = self._stderr
+        if handle is None:
+            return ""
+        try:
+            handle.flush()
+            handle.seek(0)
+            data = handle.read()
+        except Exception:  # pragma: no cover - best effort
+            return ""
+        text = data.decode("utf-8", "replace") if isinstance(data, bytes) else data
+        text = text.strip()
+        return text[-limit:] if len(text) > limit else text
+
+    def _died(self, operation: str, code: Optional[int], during: str) -> BackendError:
+        """One place that turns a dead host into something worth reading."""
+        if code is None and self._process is not None:
+            # The pipe closing is what is noticed first; the exit status can
+            # take a moment longer to be reapable. Waiting briefly is the
+            # difference between naming the failure and reporting "code None".
+            try:
+                code = self._process.wait(timeout=2)
+            except subprocess.TimeoutExpired:  # pragma: no cover - rare
+                code = None
+        detail = self.host_stderr()
+        message = (
+            f"the host process {during} (exit code {code}); the vendor SDK ran "
+            "in that process, so the interpreter is unaffected"
+        )
+        if detail:
+            message += ". It reported:" + os.linesep + detail
+        else:
+            message += (
+                ". It reported nothing, which usually means the vendor runtime "
+                "could not load: check that the Sony runtime library and "
+                f"CrAdapter sit beside {self._host_path or 'the host executable'}"
+            )
+        return BackendError(message, operation=operation, backend_code=code)
 
     # -- transport ---------------------------------------------------------
     def _next_request_id(self) -> int:
@@ -413,14 +523,9 @@ class HostBackend(
         code = process.poll()
         if code is not None:
             self._state = HostState.CRASHED
+            error = self._died(operation, code, "exited unexpectedly")
             self._cleanup_process()
-            raise BackendError(
-                f"the host process exited unexpectedly with code {code}; the "
-                "vendor SDK ran in that process, so the interpreter is "
-                "unaffected. Start a new SDK to recover.",
-                operation=operation,
-                backend_code=code,
-            )
+            raise error
         return process
 
     def _write(self, payload: bytes) -> None:
@@ -441,21 +546,24 @@ class HostBackend(
             frame = _ipc.read_frame(process.stdout)
         except _ipc.ProtocolError as exc:
             self._state = HostState.CRASHED
+            detail = self.host_stderr()
             self._terminate()
-            raise BackendError(
-                f"the host sent a malformed frame during {operation}: {exc}",
-                operation=operation,
-            ) from exc
+            message = (
+                f"the host sent a malformed frame during {operation}: {exc}. "
+                "Its stdout carries the protocol and nothing else, so anything "
+                "written there by other code corrupts the stream"
+            )
+            if detail:
+                message += ". It also reported:" + os.linesep + detail
+            raise BackendError(message, operation=operation) from exc
         if frame is None:
             code = process.poll()
             self._state = HostState.CRASHED
+            # Built before the cleanup, because cleanup closes the stream the
+            # host's own account of its death is sitting in.
+            error = self._died(operation, code, f"ended during {operation}")
             self._cleanup_process()
-            raise BackendError(
-                f"the host process ended during {operation} (exit code {code}); "
-                "the interpreter is unaffected",
-                operation=operation,
-                backend_code=code if code is not None else None,
-            )
+            raise error
         return frame
 
     def _call(
@@ -512,7 +620,7 @@ class HostBackend(
                 i32_arg=_as_int32(i32),
                 i32_arg2=_as_int32(i32_2),
                 handle=handle,
-                text=text.encode("utf-8")[:207],
+                text=_encode_text(text, operation or f"op{op}"),
             )
             request_id = self._next_request_id()
             self._write(
