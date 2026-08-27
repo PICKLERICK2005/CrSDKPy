@@ -5,7 +5,7 @@ of them is not, the failure a user actually sees is usually from something
 further down the chain: a helper process that exits with a number, or a vendor
 status code. This answers the question directly instead.
 
-    python -m crsdkpy.diagnostics
+    python -m crsdkpy
 
 The four things:
 
@@ -147,8 +147,13 @@ class Diagnosis:
             f"  native bridge    {self.bridge_path or 'not built or not found'}"
         )
         lines.append(f"  host executable  {self.host_path or 'not built or not found'}")
-        if self.staging is None:
-            lines.append("  Sony runtime     not checked: no host to check beside")
+        if self.staging is None or self.staging.directory is None:
+            # Not a finding of its own: there is nowhere to look until the host
+            # exists, and saying "missing" here would send a user after the
+            # wrong problem.
+            lines.append(
+                "  Sony runtime     not checked yet: build or locate the host first"
+            )
         elif self.staging.complete:
             lines.append(f"  Sony runtime     staged in {self.staging.directory}")
         else:

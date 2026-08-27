@@ -248,14 +248,30 @@ def test_diagnose_reports_every_stage_without_loading_the_vendor_sdk() -> None:
 
 
 def test_diagnose_is_runnable_as_a_module() -> None:
+    """The shortest thing to run when nothing starts, and it must be quiet.
+
+    Importing the package pulls this module in, so running the submodule form
+    warns about a double import. The package entry point avoids that, and a
+    diagnostic command that opens with a RuntimeWarning is not one.
+    """
     completed = subprocess.run(
-        [sys.executable, "-m", "crsdkpy.diagnostics"],
+        [sys.executable, "-m", "crsdkpy"],
         capture_output=True,
         text=True,
         timeout=60,
     )
     assert completed.returncode == 0
     assert "CrSDKPy" in completed.stdout
+    assert "RuntimeWarning" not in completed.stderr
+
+
+def test_an_unbuilt_host_does_not_report_the_runtime_as_missing() -> None:
+    """Nowhere to look is not the same as looked and found nothing."""
+    from crsdkpy.diagnostics import Diagnosis
+
+    report = Diagnosis(package_version="x", host_path=None, staging=None).report()
+    assert "not checked yet" in report
+    assert "MISSING" not in report
 
 
 def test_an_unready_installation_says_the_simulator_still_works() -> None:

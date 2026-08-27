@@ -77,7 +77,7 @@ set CRSDKPY_HOST=...\native\build\crsdkpy_host.exe
 To check all of that before involving a camera:
 
 ```console
-python -m crsdkpy.diagnostics
+python -m crsdkpy
 ```
 
 It reports the package, the bridge, the host, and whether the Sony runtime is
