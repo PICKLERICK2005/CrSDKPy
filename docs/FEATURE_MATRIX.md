@@ -235,6 +235,28 @@ record.
   picture data has not been established yet.
 
 
+## Sony API surface deliberately not covered
+
+Recorded so the gap is a decision rather than an oversight. Each was read
+during the 0.1.0b3 documentation audit and left alone: none is needed by the
+capabilities this release claims, and adding an API because the header has one
+is how a wrapper stops being a library.
+
+- `RequestZoomAndFocusPreset` / `GetZoomAndFocusPreset` /
+  `ReleaseZoomAndFocusPreset` — read-only metadata about stored presets. The
+  preset *controls* are implemented as settings; only the info list is absent.
+- `GetRemoteTransferContentsData` — the streaming variant of the original
+  transfer. The file-writing variant is implemented and proven; this one would
+  need its own buffer-ownership handling.
+- `ControlGetRemoteTransferContentsDataFile` Pause and Resume — only Cancel is
+  used.
+- `DeleteRemoteTransferContentsFile` — destructive, and nothing here needs it.
+- `CrDeviceProperty_ZoomOperationWithInt16` (0x0303) — a finer-grained drive
+  with the same precondition as the coarse one. No body seen exposing it.
+- Monitoring, FTP transfer and job control, scene files, LUT import, stream
+  settings, PTZ presets, `GetOSDImage`, movie playback, remote firmware
+  update — whole families outside what this release is for.
+
 ## Provenance of the notes above
 
 Anything in this file that describes an API *contract* — which call to make, what

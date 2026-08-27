@@ -21,9 +21,25 @@ crsdkpy.SDK(backend=...)          start / discover / close
       .autofocus_and_capture()    gated: no focus, no exposure
       .live_view                  status(), get_frame(), frames(), measure()
       .video                      start(), stop(), state
+      .content                    index, previews, download() of originals
+      .focus                      absolute position, capture_bracket()
+      .exposure / .white_balance / .drive
+                                  typed settings over the property layer
+      .lens / .zoom / .framing / .interval
+                                  the families the camera reports it has
+      .still_transfer             what a host-bound still is delivered as
       .battery / .storage         device status
       .destination                where stills are written
       .close()                    idempotent
+```
+
+Everything after `.video` was added in 0.1.0b3. Each one answers `available`
+(or its family's equivalent) from what the camera reports, so binding to one
+does not commit an application to a body that has it:
+
+```text
+if session.zoom.available and session.zoom.operable:
+    session.zoom.operate(1)
 ```
 
 A `Capture` carries progress rather than a boolean, and previews come from it:

@@ -2,6 +2,128 @@
 
 Dates are the day the change was validated, not the day it was released.
 
+## 0.1.0b3 — 2026-08-27
+
+**A beta. The new surface in this release is simulator, native and protocol
+validated; it has not been exercised on a camera.** The b1/b2 core — capture,
+autofocus, content, previews, live view, video, device status — remains
+hardware-validated on the reference body and is unchanged. Which is which is
+listed under *Hardware validation* below and in
+`docs/FEATURE_MATRIX.md`.
+
+### Added
+
+- **Original-file downloads.** `session.content.download()` writes a full-size
+  original to a local path, reporting progress and terminal outcome through
+  the event stream, with cancellation. Uses the vendor's file-writing transfer,
+  which takes plain integer identifiers, so no vendor-owned content object is
+  ever held.
+
+- **Absolute focus position and focus brackets.** `session.focus` reads and
+  drives the position in the camera's own units, reports driving status, and
+  waits for a move to settle. `capture_bracket()` acquires a deterministic
+  sequence of frames at commanded positions and optionally restores the
+  starting position.
+
+- **Typed camera settings.** `session.exposure`, `session.white_balance` and
+  `session.drive` present f-number, exposure compensation, shutter speed, ISO,
+  exposure program, white-balance mode and drive mode as `Setting` objects over
+  the generic property layer. Access, permitted values and ranges come from
+  the camera at runtime; values stay in the vendor's own representation.
+
+- **Lens.** `session.lens` reads model, version and serial as the string
+  properties they are, and implements the separate focus-distance table
+  protocol — request, wait for the vendor's warning, read once, release —
+  including its documented enable-status precondition.
+
+- **Zoom.** `session.zoom` exposes setting, scale, digital scale, distance,
+  absolute position, driving status, speed range, type status and the zoom bar,
+  and drives the zoom. A drive is refused unless the camera currently reports
+  the operation as enabled.
+
+- **Electronic framing.** `session.framing` implements the vendor's two
+  operations and the order between them: an absolute execute, then relative
+  area updates that are only valid afterwards.
+
+- **Interval shooting.** `session.interval` exposes the settings and the
+  camera's own progress. There is no scheduler: the camera owns the sequence.
+
+- **Still transfer size.** `session.still_transfer.size` exposes the documented
+  `Original` / `SmallSize` choice for host-bound stills.
+
+- **Reconnection policy.** `camera.open(..., reconnect=...)` chooses between a
+  bounded open and the vendor's five-minute reconnect monitor. `BOUNDED` is
+  the default.
+
+- **Conformance profiles.** A sanitized profile of the reference body ships as
+  package data, with `crsdkpy.compare()` for measuring another body against it.
+  Differences are classified rather than failed: extra properties, changed
+  access and changed value sets are information, and the property count is
+  never a health check. `tools/sanitize_characterization.py` and
+  `tools/compare_profile.py` cover the workflow.
+
+- **Setup diagnostics.** `python -m crsdkpy` reports the package, bridge, host
+  and whether the Sony runtime is staged where the host will look, naming the
+  directory inspected and what was missing. Loads no vendor code.
+
+### Fixed
+
+- **Property values were decoded against a fixed element width.** The vendor
+  reports an advertised value set's size in bytes, not elements, so every
+  32-bit property reported twice as many permitted values as it has —
+  `IsoSensitivity` counted 48 where the camera advertises 24. The divisor is
+  now the width of the property's own data type.
+
+- **Current values were not narrowed to the declared width.** A signed
+  property lost its sign: exposure compensation of −0.7 EV read as 64836
+  rather than −700, and could then be neither validated nor written back.
+
+- **A stale bridge or host was accepted and then failed on use.** Only the
+  major version was checked, so a peer that predated a newly added operation
+  completed the handshake, reported ready, and failed later with an error
+  indistinguishable from a camera lacking the feature. Both minors are now
+  enforced at load and at handshake; a newer peer is still accepted. Native
+  ABI 1.5, IPC protocol 1.2.
+
+- **A dead host reported only an exit code.** Its stderr was discarded, which
+  is where a vendor loader failure says what happened. It is captured now, the
+  exit status is waited for rather than reported as none, and a host with no
+  vendor runtime staged beside it is refused before launch with a message
+  naming the directory and what was absent.
+
+- **Non-ASCII paths were mangled on the way into the vendor SDK.** The postview
+  filename went through an ASCII-only conversion, the save directory was read
+  through the narrow Windows environment, and the adapter directory was entered
+  with the narrow `chdir` — each of which breaks for any user whose account
+  name is not ASCII, which the default save directory sits under.
+
+- Property names `0x0101` and `0x0105` now match the vendor's own enumeration.
+
+### Hardware validation
+
+Unchanged from 0.1.0b2 and still valid: discovery, sessions, properties,
+events, still capture, gated autofocus, content index, thumbnails,
+screennails, RAM postview, live view, movie recording, device status,
+destination writes, busy classification and host isolation, all on
+ILME-FX3A firmware 2.02 with CRSDK 2.02.00 over USB.
+
+Awaiting a hardware session, and implemented against the vendor's documented
+contract in the meantime:
+
+- the public download lifecycle's callback and cancellation behaviour (the
+  transfer itself is proven; the lifecycle around it is not);
+- `ReconnectPolicy.BOUNDED`;
+- the typed setting facades;
+- the public focus facade and the bracket helper;
+- the lens-information request/read/release path, which needs a lens that
+  reports the feature as enabled;
+- motorized zoom, which needs a lens that can move;
+- electronic framing;
+- an interval sequence;
+- `StillImageTransSize` set to `Original`, and whether the body then delivers
+  the captured file to the host;
+- the Unicode path fixes, against a real runtime.
+
 ## 0.1.0b2 — 2026-08-20
 
 **A beta, not a release candidate and not stable.** It changes a connection

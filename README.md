@@ -87,7 +87,31 @@ was missing. It loads no vendor code, so it works when nothing else does.
 Nothing from Sony is bundled, downloaded or committed by this project, and no
 Sony file ever needs to sit next to your Python installation.
 
+## How it fits together
+
+Three objects, in that order, and nothing else to learn to get started:
+
+```text
+SDK       owns a backend and finds cameras           sdk.discover()
+ └ Camera a device, independent of any connection    camera.open(mode)
+    └ Session  one connection, in one control mode   everything else
+```
+
+A `Session` is where capture, properties, events, focus, zoom and the rest
+live. It is bound to the control mode it was opened in, because that mode
+changes what the camera exposes and the vendor SDK cannot switch it in place.
+
+The backend is chosen when the `SDK` is created:
+
+| Backend | Needs | For |
+|---|---|---|
+| `"simulator"` | nothing | development and tests, no camera, no Sony SDK |
+| `"host"` | built host + Sony runtime | **real cameras** |
+| `"native"` | built bridge + Sony runtime | diagnosis, in-process, lower level |
+
 ## Quick start
+
+Everything below runs against the simulator, with no hardware and no Sony SDK.## Quick start
 
 Everything below runs against the simulator, with no hardware and no Sony SDK.
 
@@ -350,6 +374,23 @@ arrived downscaled rather than as the captured file. Whether that body honours
 `Original` has not been tested on hardware, so this exposes the setting and
 claims nothing about the result.
 
+### Reconnection
+
+The vendor can monitor a dropped link and re-establish it on its own, and that
+monitor keeps trying for five minutes before giving up. That is what a
+long-lived session wants and the opposite of what *opening* one wants, since
+the same five minutes then becomes the worst case for a single open.
+
+```python
+camera.open("remote")                                    # BOUNDED, the default
+camera.open("remote", reconnect=crsdkpy.ReconnectPolicy.VENDOR)
+```
+
+`BOUNDED` leaves the monitor off, so opening either succeeds or fails promptly
+and a dropped link is reported rather than papered over. `VENDOR` turns it on
+for callers who would rather a cable event healed itself and can afford the
+wait.
+
 ### Conformance profiles
 
 What one body was measured to expose, sanitized and tracked, plus the machinery
@@ -467,6 +508,10 @@ python examples/camera_adapter.py
   lifecycle.
 * [`docs/FX3_CHARACTERIZATION.md`](docs/FX3_CHARACTERIZATION.md): the hardware
   measurements the design is based on.
+* [`src/crsdkpy/profiles/`](src/crsdkpy/profiles/): the sanitized conformance
+  profile of the reference body, and what a comparison is measured against.
+* `python -m crsdkpy`: what is installed, what is missing, and where CrSDKPy
+  looked for it. Run this first when something will not start.
 * [`tools/hardware_validation.py`](tools/hardware_validation.py): the gates
   that only a real camera can answer. Run `python tools/hardware_validation.py
   --list` to see the stages.
