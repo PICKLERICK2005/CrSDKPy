@@ -33,7 +33,14 @@ class SDK:
         exists.
 
     A backend whose bridge or host executable is not built raises an error
-    saying how to build it.
+    saying how to build it. :func:`crsdkpy.diagnose` answers the same question
+    before anything is attempted.
+
+    ``sdk_path`` points at the *first-party* artifact the chosen backend needs,
+    not at the Sony SDK: the host executable for ``"host"``, the native bridge
+    library for ``"native"``. It is ignored by the simulator. Leave it unset
+    and the usual build directory and the ``CRSDKPY_HOST`` / ``CRSDKPY_BRIDGE``
+    environment variables are consulted instead.
 
     >>> with SDK(backend="simulator", profile="fx3a") as sdk:
     ...     camera = sdk.discover()[0]

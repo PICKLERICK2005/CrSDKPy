@@ -61,6 +61,7 @@ architecture rather than adding a second backend.
 | Still destination read / write | yes | yes | **yes** ¹⁰ |
 | Busy reported as busy, not as a lost link | yes | yes | **yes** ¹¹ |
 | Host-process isolation and recovery | yes | yes | **yes** |
+| Setup diagnostics (`crsdkpy.diagnose`) | yes | yes | n/a |
 | Sanitized conformance profile of the reference body | yes | yes | **yes** ¹⁶ |
 | Profile comparison for a body nobody here owns | yes | yes | no |
 

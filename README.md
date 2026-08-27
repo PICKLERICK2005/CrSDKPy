@@ -2,17 +2,16 @@
 
 An independent Python interface for Sony Camera Remote SDK (CRSDK).
 
-> **Beta.** The public API is complete and intended to be stable for
-> integration. Discovery, sessions, properties, events, still capture, gated
-> autofocus, the content index with thumbnails and screennails, RAM postview,
-> live view, movie recording and device status are implemented against both a
-> deterministic simulator and a native out-of-process backend.
+> **Beta, and still growing.** The core -- discovery, sessions, properties,
+> events, capture, autofocus, content, previews, live view, video -- has been
+> stable across releases and is what an integration should bind to. Newer
+> surfaces are additive and less settled; see the Status table below for which
+> is which.
 >
-> **Hardware validation is tracked separately from implementation.** Which
-> features have actually been exercised on a camera, and which have not, is
-> recorded in [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md). An
-> implemented feature and a validated one are different claims and this
-> project does not conflate them.
+> **Implemented, tested and hardware-validated are three different claims**
+> and this project does not conflate them. What has actually been exercised on
+> a camera is recorded in [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md);
+> a good deal of the newer surface is simulator-tested only and is marked so.
 
 CrSDKPy is a general-purpose library, not a wrapper around one camera.
 Capabilities are discovered at runtime so there is no model-name branching
@@ -45,28 +44,45 @@ of their respective owners.
 python -m pip install CrSDKPy
 ```
 
-That wheel is pure Python and complete on its own for the simulator, the whole
-public API, and anything built against it. No compiler, no Sony SDK.
+That wheel is pure Python. It is everything you need to develop against the
+simulator, and every API in this document imports and works without a camera.
+No compiler, no Sony SDK.
 
 **Driving a real camera additionally needs a `crsdkpy_host` executable, which
 you build yourself.** It is not shipped as a wheel: the host links against the
 Sony Camera Remote SDK, which is user-supplied under Sony's own terms and can
 never be redistributed here, so there is no lawful prebuilt binary to publish.
 
-The sources for it travel in the source distribution:
+The sources for it travel in the source distribution, so either clone the
+repository or unpack an sdist:
 
 ```console
-pip download --no-binary :all: --no-deps CrSDKPy   # or clone the repository
+pip download --no-binary :all: --no-deps CrSDKPy
+tar xf CrSDKPy-*.tar.gz && cd CrSDKPy-*
+
 cmake -S native -B native/build -DCRSDK_ROOT=/path/to/CrSDK/RemoteCli
 cmake --build native/build --config Release
 ```
 
-Put the Sony runtime and its `CrAdapter/` directory beside the built
-`crsdkpy_host`, then point CrSDKPy at it if it is somewhere unusual:
+Then copy the Sony runtime **and its `CrAdapter/` directory** into the same
+directory as the built `crsdkpy_host`. That placement is not a preference:
+the vendor SDK resolves `CrAdapter` against the host executable's own
+directory, so a runtime staged anywhere else is not found no matter what you
+point at it.
 
 ```console
 set CRSDKPY_HOST=...\native\build\crsdkpy_host.exe
 ```
+
+To check all of that before involving a camera:
+
+```console
+python -m crsdkpy.diagnostics
+```
+
+It reports the package, the bridge, the host, and whether the Sony runtime is
+staged where the host will look, naming the directory it inspected and what
+was missing. It loads no vendor code, so it works when nothing else does.
 
 Nothing from Sony is bundled, downloaded or committed by this project, and no
 Sony file ever needs to sit next to your Python installation.
@@ -468,20 +484,46 @@ python -m twine check dist/*
 
 ## Status
 
-| Area | State |
-|---|---|
-| Public API, capabilities, properties, events | Implemented, stable for integration |
-| Capture, gated autofocus, content, previews, postview, live view, video | Implemented |
-| Deterministic simulator with profiles and scenarios | Implemented |
-| Native out-of-process backend | Implemented |
-| Hardware validation | Partial — see [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md) |
+Three separate columns, because they are three separate claims. "Tested" means
+the automated suite covers it against the simulator, the fake host, or both;
+"hardware" means it has been exercised on a real camera.
+
+| Area | Implemented | Tested | Hardware |
+|---|:---:|:---:|:---:|
+| Discovery, sessions, properties, events | yes | yes | **yes** |
+| Still capture, gated autofocus, device status | yes | yes | **yes** |
+| Content index, thumbnails, screennails | yes | yes | **yes** |
+| RAM postview, live view, movie recording | yes | yes | **yes** |
+| Destination read/write, busy classification | yes | yes | **yes** |
+| Deterministic simulator, profiles, scenarios | yes | yes | n/a |
+| Native and out-of-process backends | yes | yes | **yes** |
+| Original-file downloads | yes | yes | **yes** ¹ |
+| Reconnection policy (`BOUNDED` / `VENDOR`) | yes | yes | vendor only ² |
+| Absolute focus position, focus brackets | yes | yes | no |
+| Typed exposure / white-balance / drive settings | yes | yes | no |
+| Lens identity | yes | yes | **yes** |
+| Lens focus-distance table | yes | yes | no ³ |
+| Zoom state, drive, absolute position | yes | yes | no ⁴ |
+| Electronic framing | yes | yes | no |
+| Interval shooting, still-transfer size | yes | yes | no |
+| Conformance profile and body comparison | yes | yes | reference body only |
+
+¹ The transfer itself is proven; the download lifecycle's public callback and
+cancellation paths are not.
+² The vendor policy is what every hardware session used. `BOUNDED` has never
+been exercised on a camera.
+³ The reference lens reports the feature as disabled, so the request path has
+never had a body that would answer it.
+⁴ The family is exposed on the reference body, but its lens cannot motorise
+anything, so no zoom has ever moved.
 
 Known limitations:
 
 - Validated on one body so far. A second body is the next validation step, as
   a test of the generic architecture rather than a new backend.
-- RAM postview, live view, movie recording and destination writes are
-  implemented and simulator-tested but **not yet hardware-validated**.
+- Everything added after the core is simulator- and protocol-tested but, with
+  the exceptions marked above, **not yet hardware-validated**. Treat those
+  surfaces as working-by-construction rather than proven.
 - Live view currently uses the same pipe transport as everything else. Whether
   that is sufficient is a measurement question; `session.live_view.measure()`
   exists to answer it, and no transport change will be made before it does.
