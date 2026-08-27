@@ -17,6 +17,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Optional
 
+from .. import conformance
 from ..capabilities import CameraCapabilities
 from ..enums import (
     PreviewKind,
@@ -393,37 +394,76 @@ def build_property(code: int, value: object) -> Property:
 #: reviewed characterization: live view only in Remote, content APIs only in
 #: RemoteTransfer, postview configuration only in RemoteTransfer, and postview
 #: delivery gated on the destination including the host in either mode.
+def _reference() -> conformance.ConformanceProfile:
+    """The sanitized measurement the FX3A profile is built from.
+
+    Loaded rather than transcribed. Every fact below that came off hardware --
+    the identity, what each control mode can do, which codes exist only where
+    live view does -- has one home, and it is the tracked profile.
+    """
+    return conformance.reference_profile()
+
+
+def _mode_from_reference(
+    profile: conformance.ConformanceProfile, control_mode: str, **extra: object
+) -> ModeProfile:
+    """Build a mode from the measured capabilities of its two surfaces.
+
+    Destination did not change the property surface on the reference body, but
+    it did change postview delivery, so the two surfaces of a mode are read
+    together: what they agree on describes the mode, and where they disagree
+    describes the destination's effect.
+    """
+    card = profile.surfaces[f"{control_mode}+memory_card"].capabilities
+    host = profile.surfaces[f"{control_mode}+host_and_memory_card"].capabilities
+    # Codes this mode has that the other one does not. Recorded as the other
+    # surface's absent list, which is where the measurement actually lives.
+    other = (
+        "remote_transfer" if control_mode == "remote" else "remote"
+    )
+    only_here = tuple(
+        sorted(profile.surfaces[f"{other}+memory_card"].absent_codes)
+    )
+    return ModeProfile(
+        live_view=bool(card.get("live_view")),
+        content_index=bool(card.get("content_index")),
+        thumbnail=bool(card.get("thumbnail")),
+        screennail=bool(card.get("screennail")),
+        postview_configuration=bool(card.get("postview_configuration")),
+        postview_delivery_possible=bool(
+            card.get("postview_delivery") or host.get("postview_delivery")
+        ),
+        postview_delivery_requires_host=(
+            not card.get("postview_delivery") and bool(host.get("postview_delivery"))
+        ),
+        still_capture=bool(card.get("still_capture", True)),
+        video=bool(card.get("video", True)),
+        extra_property_codes=only_here,
+        **extra,
+    )
+
+
+_REFERENCE = _reference()
+
+#: The reference body, as measured. The synthetic values, timings and preview
+#: shapes below are the simulator's own; the identity and the per-mode
+#: capabilities are read from the tracked profile so there is one place they
+#: can be wrong. This is deliberately not an emulator: it does not reproduce
+#: the body's several hundred properties or their values.
 FX3A = CameraProfile(
     name="fx3a",
-    model="ILME-FX3A",
-    firmware="2.02",
+    model=_REFERENCE.body["model"],
+    firmware=_REFERENCE.body["firmware"],
     transport="usb",
-    adapter="Cr_PTP_USB",
-    usb_pid=0x0F52,
+    adapter=_REFERENCE.body["adapter"],
+    usb_pid=int(_REFERENCE.body["usb_pid"], 16),
     still_capture=True,
     autofocus_s1=True,
     video=True,
     modes={
-        SessionMode.REMOTE: ModeProfile(
-            live_view=True,
-            content_index=False,
-            thumbnail=False,
-            screennail=False,
-            postview_configuration=False,
-            postview_delivery_possible=True,
-            postview_delivery_requires_host=True,
-            # Two live-view codes exist only where live view exists. These are
-            # deliberately codes CrSDKPy has no name for.
-            extra_property_codes=(0x0581, 0x0582),
-        ),
-        SessionMode.REMOTE_TRANSFER: ModeProfile(
-            live_view=False,
-            content_index=True,
-            thumbnail=True,
-            screennail=True,
-            postview_configuration=True,
-            postview_delivery_possible=True,
-            postview_delivery_requires_host=True,
+        SessionMode.REMOTE: _mode_from_reference(_REFERENCE, "remote"),
+        SessionMode.REMOTE_TRANSFER: _mode_from_reference(
+            _REFERENCE, "remote_transfer"
         ),
     },
     destinations=frozenset(

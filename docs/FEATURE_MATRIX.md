@@ -61,6 +61,8 @@ architecture rather than adding a second backend.
 | Still destination read / write | yes | yes | **yes** ¹⁰ |
 | Busy reported as busy, not as a lost link | yes | yes | **yes** ¹¹ |
 | Host-process isolation and recovery | yes | yes | **yes** |
+| Sanitized conformance profile of the reference body | yes | yes | **yes** ¹⁶ |
+| Profile comparison for a body nobody here owns | yes | yes | no |
 
 ¹ Re-exercised against a forced USB disconnect on 2026-08-20 with live view
 running. The observed sequence was `connected → reconnecting → connected`, the
@@ -145,6 +147,15 @@ capture arrived as a 1616x1080 JPEG rather than the 4240x2832 original. The
 property reports itself writable. Setting it to `Original` (0) and repeating
 the capture is **untested** — the hardware window closed first — so no claim is
 made about whether the body honours it.
+
+¹⁶ `src/crsdkpy/profiles/ILME-FX3A.json` is the reference body's measured
+property surface with the identifying parts removed: 394 codes with their
+vendor names, data types, access and advertised value sets; the four
+control-mode/destination surfaces and how they differ; the two codes the
+vendor's own enumeration does not name; and the capabilities that were measured
+rather than assumed. The private captures it is derived from are not tracked
+and never ship. Comparison against it is available to any body, but has only
+ever been run against the body it came from.
 
 ## Known vendor behaviour worth knowing about
 

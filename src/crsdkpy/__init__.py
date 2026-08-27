@@ -36,6 +36,18 @@ from .capabilities import CameraCapabilities, SessionCapabilities
 from .capture import Capture, CapturedContent, FocusResult
 from .clock import Clock, RealClock, VirtualClock
 from .commands import Command, CommandParameter
+from .conformance import (
+    ConformanceProfile,
+    ConformanceReport,
+    Finding,
+    FindingKind,
+    Observation,
+    Severity,
+    compare,
+    load_profile,
+    profile_names,
+    reference_profile,
+)
 from .content import Content
 from .enums import (
     CaptureState,
@@ -175,6 +187,16 @@ __all__ = [
     "FramingType",
     "Interval",
     "IntervalStatus",
+    "ConformanceProfile",
+    "ConformanceReport",
+    "Finding",
+    "FindingKind",
+    "Observation",
+    "Severity",
+    "compare",
+    "load_profile",
+    "profile_names",
+    "reference_profile",
     "Exposure",
     "WhiteBalance",
     "Drive",

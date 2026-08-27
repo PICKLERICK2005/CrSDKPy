@@ -18,6 +18,11 @@ recursive-include native *.h *.c *.cpp *.txt *.md
 # Documentation, the integration example, and the maintained hardware
 # validation suite.
 recursive-include docs *.md *.json
+
+# Sanitized conformance profiles. These are hardware evidence with the
+# identifying parts removed; the private captures they are derived from are
+# pruned below and never ship.
+recursive-include src/crsdkpy/profiles *.json
 recursive-include examples *.py
 recursive-include tools *.py
 

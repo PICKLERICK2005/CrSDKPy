@@ -87,6 +87,21 @@ def jsonable(value: Any) -> Any:
     return repr(value)
 
 
+def _constraint_shape(prop) -> tuple:
+    """The advertised-constraint shape, as one of four explicit answers."""
+    if prop.value_range is not None:
+        return "range", [
+            prop.value_range.minimum,
+            prop.value_range.maximum,
+            prop.value_range.step or 0,
+        ]
+    if prop.allowed_values:
+        return "enum", [jsonable(v) for v in prop.allowed_values]
+    if prop.metadata.get("values_undecoded"):
+        return "raw", []
+    return "none", []
+
+
 def describe_property(prop, names: dict) -> dict:
     code = int(prop.code)
     entry = {
@@ -109,6 +124,10 @@ def describe_property(prop, names: dict) -> dict:
             "maximum": prop.value_range.maximum,
             "step": prop.value_range.step,
         }
+    # Stated rather than inferred. A comparison has to be able to tell a
+    # property that advertises nothing from one this capture never asked about,
+    # and an absent field cannot say which.
+    entry["value_set"], entry["values"] = _constraint_shape(prop)
     if prop.metadata:
         entry["metadata"] = {k: jsonable(v) for k, v in prop.metadata.items()}
     return entry

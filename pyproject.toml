@@ -50,6 +50,11 @@ version = { attr = "crsdkpy.__version__" }
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+# Conformance profiles are data the library reads at runtime, so they have to
+# travel in the wheel rather than only in the sdist.
+crsdkpy = ["py.typed", "profiles/*.json"]
+
 [tool.pytest.ini_options]
 addopts = "-ra"
 testpaths = ["tests"]

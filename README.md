@@ -334,6 +334,41 @@ arrived downscaled rather than as the captured file. Whether that body honours
 `Original` has not been tested on hardware, so this exposes the setting and
 claims nothing about the result.
 
+### Conformance profiles
+
+What one body was measured to expose, sanitized and tracked, plus the machinery
+to compare another body against it:
+
+```python
+profile = crsdkpy.reference_profile()          # the measured ILME-FX3A
+profile.body["firmware"]                        # '2.02'
+profile.codes_for("remote+memory_card")         # 394 codes
+profile.unknown_codes                           # frozenset({0x0581, 0x0582})
+
+report = crsdkpy.compare(profile, observation)
+report.conformant                               # no declared invariant broke
+report.of_kind(crsdkpy.FindingKind.NEW_PROPERTY)
+```
+
+A comparison is not an assertion that every camera is the reference body. A
+different Sony body is *expected* to differ, so extra properties, changed
+access, and changed value sets come back as information. Only a small set of
+declared invariants can fail a comparison, and the property count is
+deliberately not among them -- one body reported 394 in Remote and 392 in
+RemoteTransfer, so a count is an observation and never a health check.
+
+The workflow for a body nobody here owns:
+
+```
+tools/characterize_camera.py       # capture, stays private
+tools/sanitize_characterization.py # -> the tracked profile, once per body
+tools/compare_profile.py           # -> what this body does differently
+```
+
+Capture and sanitization are separate commands on purpose: the capture carries
+the body serial and host details, and the moment that becomes publishable is
+one explicit step rather than a side effect.
+
 ### Raw escape hatch
 
 Vendor features CrSDKPy has not modelled stay reachable, including property
