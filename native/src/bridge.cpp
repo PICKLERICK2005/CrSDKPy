@@ -63,23 +63,6 @@ void copy_string(char* dest, size_t capacity, const std::string& source)
     dest[n] = '\0';
 }
 
-// The vendor uses wchar_t on Windows and char elsewhere. Narrow without
-// pulling in a locale dependency: model and adapter names are ASCII.
-std::string narrow(const CrChar* text)
-{
-    if (!text) return std::string();
-#if defined(_WIN32)
-    std::string out;
-    for (const CrChar* p = text; *p; ++p) {
-        const unsigned int value = static_cast<unsigned int>(*p);
-        out.push_back(value < 0x80 ? static_cast<char>(value) : '?');
-    }
-    return out;
-#else
-    return std::string(text);
-#endif
-}
-
 // Vendor strings are UTF-16 on Windows. Converted to UTF-8 rather than
 // narrowed, because a model or lens name is not guaranteed to be ASCII and
 // replacing what does not fit would corrupt it silently. A leading byte-order
@@ -151,17 +134,25 @@ std::vector<CrChar> from_utf8(const std::string& text)
 #endif
 }
 
-// Reads an environment variable. Uses the bounds-checked form on Windows,
-// where the portable one is deprecated.
-std::string environment(const char* name)
+// Reads an environment variable holding a path, as UTF-8.
+//
+// The wide API on Windows, deliberately. The narrow environment is converted
+// through the active code page, which replaces anything it cannot represent --
+// and the default save directory sits under the user's profile, so a single
+// accented character in an account name is enough to turn a valid path into
+// one the SDK cannot use.
+std::string environment_path(const char* name)
 {
 #if defined(_WIN32)
-    char buffer[1024];
-    size_t length = 0;
-    if (getenv_s(&length, buffer, sizeof(buffer), name) != 0 || length == 0) {
-        return std::string();
-    }
-    return std::string(buffer);
+    const std::vector<CrChar> wide_name = from_utf8(name ? name : "");
+    if (wide_name.empty()) return std::string();
+    const DWORD needed = GetEnvironmentVariableW(wide_name.data(), nullptr, 0);
+    if (needed == 0) return std::string();
+    std::vector<wchar_t> buffer(needed);
+    const DWORD written =
+        GetEnvironmentVariableW(wide_name.data(), buffer.data(), needed);
+    if (written == 0 || written >= needed) return std::string();
+    return to_utf8(reinterpret_cast<const CrInt16u*>(buffer.data()));
 #else
     const char* value = std::getenv(name);
     return value ? std::string(value) : std::string();
@@ -186,12 +177,20 @@ public:
     explicit ScopedWorkingDirectory(const char* target)
     {
         if (!target || !*target) return;
-        char buffer[4096] = {0};
 #if defined(_WIN32)
-        if (!_getcwd(buffer, static_cast<int>(sizeof(buffer)))) return;
+        // Wide, like every other path here: the narrow form reads UTF-8 bytes
+        // as the active code page and fails on a directory the user can see
+        // perfectly well in Explorer.
+        wchar_t buffer[4096] = {0};
+        if (!_wgetcwd(buffer, static_cast<int>(sizeof(buffer) / sizeof(*buffer)))) {
+            return;
+        }
         previous_ = buffer;
-        ok_ = (_chdir(target) == 0);
+        const std::vector<CrChar> wide = from_utf8(target);
+        if (wide.empty()) return;
+        ok_ = (_wchdir(wide.data()) == 0);
 #else
+        char buffer[4096] = {0};
         if (!getcwd(buffer, sizeof(buffer))) return;
         previous_ = buffer;
         ok_ = (chdir(target) == 0);
@@ -203,7 +202,7 @@ public:
     {
         if (!changed_) return;
 #if defined(_WIN32)
-        _chdir(previous_.c_str());
+        _wchdir(previous_.c_str());
 #else
         if (chdir(previous_.c_str()) != 0) { /* nothing useful to do here */ }
 #endif
@@ -215,7 +214,11 @@ public:
     bool ok() const { return ok_; }
 
 private:
+#if defined(_WIN32)
+    std::wstring previous_;
+#else
     std::string previous_;
+#endif
     bool changed_ = false;
     bool ok_ = true;  // no target requested is success
 };
@@ -1035,7 +1038,7 @@ void Callback::OnNotifyPostViewImage(CrChar* filename, CrInt32u size)
     // Only the announcement is recorded here. The bytes are pulled on the
     // caller's thread, so no vendor call is made from inside a vendor
     // callback.
-    session_->on_postview_announced(narrow(filename), size);
+    session_->on_postview_announced(crchar_to_utf8(filename), size);
     session_->push(CRSDKPY_EVENT_CONTENT, 0, 0, 0, 1 /* postview */,
                    static_cast<int64_t>(size));
 }
@@ -1160,10 +1163,12 @@ int32_t crsdkpy_init(const char* adapter_dir)
     // around the init call and put it back, so the caller's working directory
     // is not permanently changed by loading a camera library.
     g_adapter_dir = adapter_dir ? adapter_dir : "";
-    g_save_dir = environment("CRSDKPY_SAVE_DIR");
+    g_save_dir = environment_path("CRSDKPY_SAVE_DIR");
     ScopedWorkingDirectory scoped(g_adapter_dir.c_str());
     if (!scoped.ok()) {
-        set_error("could not switch to the adapter directory");
+        set_error("could not enter the adapter directory " + g_adapter_dir +
+                  "; it must exist and be readable, and it is where the vendor "
+                  "runtime and CrAdapter are expected to live");
         g_adapter_dir.clear();
         return CRSDKPY_ERR_INVALID_ARG;
     }
@@ -1233,7 +1238,7 @@ int32_t crsdkpy_enumerate(int32_t timeout_sec, uint32_t* out_count)
         const auto* info = found->GetCameraObjectInfo(i);
         // A stable key: model plus the vendor id bytes. Survives reopen and
         // control-mode changes, which is what Python's Camera relies on.
-        std::string key = narrow(info->GetModel());
+        std::string key = crchar_to_utf8(info->GetModel());
         key.push_back(':');
         const CrInt8u* id = info->GetId();
         const CrInt32u id_size = info->GetIdSize();
@@ -1260,11 +1265,12 @@ int32_t crsdkpy_camera_at(uint32_t index, crsdkpy_camera_info* out)
     const auto* info = g_cameras.get()->GetCameraObjectInfo(index);
     std::memset(out, 0, sizeof(*out));
     copy_string(out->device_key, sizeof(out->device_key), g_camera_keys[index]);
-    copy_string(out->model, sizeof(out->model), narrow(info->GetModel()));
+    copy_string(out->model, sizeof(out->model), crchar_to_utf8(info->GetModel()));
     copy_string(out->serial, sizeof(out->serial), g_camera_keys[index]);
     copy_string(out->transport, sizeof(out->transport),
-                narrow(info->GetConnectionTypeName()));
-    copy_string(out->adapter, sizeof(out->adapter), narrow(info->GetAdaptorName()));
+                crchar_to_utf8(info->GetConnectionTypeName()));
+    copy_string(out->adapter, sizeof(out->adapter),
+                crchar_to_utf8(info->GetAdaptorName()));
     out->usb_pid = static_cast<int32_t>(info->GetUsbPid());
     return CRSDKPY_OK;
 }
