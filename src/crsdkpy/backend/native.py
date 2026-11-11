@@ -136,6 +136,7 @@ _FOCUS_AF_STATUS = {
     7: FocusState.NOT_FOCUSED_AF_C,
 }
 
+
 def native_backend_available(path: Optional[str] = None) -> bool:
     """Whether a built bridge can be found and loaded."""
     try:
@@ -143,7 +144,6 @@ def native_backend_available(path: Optional[str] = None) -> bool:
     except Exception:
         return False
     return True
-
 
 
 #: Public command -> vendor command id. Raw integers pass through untouched, so
@@ -174,7 +174,6 @@ def parameter_to_abi(parameter: Any) -> int:
     if isinstance(parameter, CommandParameter):
         return int(parameter.value)
     return int(parameter)
-
 
 
 # Vendor codes and values. Backend-level knowledge on purpose: the public
@@ -246,6 +245,22 @@ class ShutterStageMixin:
     needed. Kept in one place so the in-process and hosted backends cannot
     drift apart.
     """
+
+    def operation_boundary(self, session_id: str, operation: str, code: int):
+        return getattr(self, "_operation_boundaries", {}).get(
+            (session_id, operation, code)
+        )
+
+    def _remember_boundary(self, session_id, operation, code, raw):
+        from ..events import NativeEventInfo
+
+        if not hasattr(self, "_operation_boundaries"):
+            self._operation_boundaries = {}
+        self._operation_boundaries[session_id, operation, code] = NativeEventInfo(
+            timestamp_ms=int(raw.timestamp_ms),
+            sequence=int(raw.sequence),
+            dropped_count=int(raw.dropped_count),
+        )
 
     def get_half_press(self, session_id: str) -> bool:
         prop = self.get_property(session_id, PropertyCode(CODE_S1))
@@ -427,9 +442,30 @@ def decode_camera_info(info: _cabi.CameraInfoStruct) -> BackendCameraInfo:
         metadata={"backend": "native", "phase": 1},
     )
 
+
 # -- sessions ----------------------------------------------------------
 
+
 def decode_event(
+    raw: _cabi.EventStruct, *, timestamp_ms: Optional[int] = None
+) -> Event:
+    from ..events import NativeEventInfo
+
+    event = _decode_event(raw, timestamp_ms=timestamp_ms)
+    object.__setattr__(
+        event,
+        "native",
+        NativeEventInfo(
+            timestamp_ms=int(raw.timestamp_ms),
+            sequence=int(raw.reserved) & 0xFFFFFFFF,
+            raw_kind=int(raw.kind),
+            raw_code=int(raw.code),
+        ),
+    )
+    return event
+
+
+def _decode_event(
     raw: _cabi.EventStruct, *, timestamp_ms: Optional[int] = None
 ) -> Event:
     # The bridge stamps events on its own monotonic clock, which shares no
@@ -448,9 +484,7 @@ def decode_event(
     if raw.kind == _cabi.EVENT_TRANSFER:
         return TransferEvent(
             timestamp_ms=stamp,
-            outcome=_ABI_TO_TRANSFER_OUTCOME.get(
-                raw.i1, TransferOutcome.UNKNOWN
-            ),
+            outcome=_ABI_TO_TRANSFER_OUTCOME.get(raw.i1, TransferOutcome.UNKNOWN),
             percent=int(raw.i0),
             # Kept even when the outcome is recognised: deciding what to retry
             # is the caller's business and they may want the exact code.
@@ -879,6 +913,7 @@ def unsupported_content_mode(mode: SessionMode, operation: str, capability: str)
 
 # -- properties --------------------------------------------------------
 
+
 def decode_property(raw: _cabi.PropertyStruct) -> Property:
     return Property(
         code=PropertyCode(int(raw.code)),
@@ -1176,11 +1211,15 @@ class NativeBackend(
 
     def set_property(self, session_id: str, code: PropertyCode, value: Any) -> None:
         handle = self._handle(session_id, "set_property")
+        boundary = _cabi.EventBoundaryStruct()
         _cabi.check(
             self._lib,
-            self._lib.crsdkpy_set_property(handle, int(code), int(value)),
+            self._lib.crsdkpy_set_property_timed(
+                handle, int(code), int(value), ctypes.byref(boundary)
+            ),
             "set_property",
         )
+        self._remember_boundary(session_id, "property", int(code), boundary)
 
     # -- framing -----------------------------------------------------------
     def execute_framing(self, session_id: str, request: Mapping[str, Any]) -> None:
@@ -1251,13 +1290,16 @@ class NativeBackend(
 
     def send_command(self, session_id: str, command: Any, parameter: Any) -> None:
         handle = self._handle(session_id, "send_command")
+        boundary = _cabi.EventBoundaryStruct()
+        code = command_to_abi(command)
         _cabi.check(
             self._lib,
-            self._lib.crsdkpy_send_command(
-                handle, command_to_abi(command), parameter_to_abi(parameter)
+            self._lib.crsdkpy_send_command_timed(
+                handle, code, parameter_to_abi(parameter), ctypes.byref(boundary)
             ),
             "send_command",
         )
+        self._remember_boundary(session_id, "command", code, boundary)
 
     # -- live view ---------------------------------------------------------
     def live_view_info(self, session_id: str) -> LiveViewInfo:

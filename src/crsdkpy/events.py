@@ -28,6 +28,7 @@ __all__ = [
     "Event",
     "FocusEvent",
     "FocusSource",
+    "NativeEventInfo",
     "PropertyChangedEvent",
     "RecordingEvent",
     "TransferEvent",
@@ -52,10 +53,24 @@ class FocusSource:
 
 
 @dataclass(frozen=True)
+class NativeEventInfo:
+    """Bridge enqueue order/time, not camera generation or physical actuation."""
+
+    timestamp_ms: int
+    sequence: int
+    raw_kind: int = 0
+    raw_code: int = 0
+    dropped_count: int = 0
+
+
+@dataclass(frozen=True)
 class Event:
     """Base class for everything delivered on the session event stream."""
 
     timestamp_ms: int = 0
+    native: Optional[NativeEventInfo] = field(
+        default=None, init=False, compare=False, repr=False
+    )
 
     @property
     def kind(self) -> str:

@@ -48,7 +48,7 @@ extern "C" {
  * indistinguishable from a camera that lacks the feature. The minor is what
  * lets the client refuse a too-old host during the handshake instead. */
 #define CRSDKPY_IPC_VERSION_MAJOR 1
-#define CRSDKPY_IPC_VERSION_MINOR 2
+#define CRSDKPY_IPC_VERSION_MINOR 3
 
 /* Refuse absurd frames rather than attempting a huge allocation. */
 #define CRSDKPY_IPC_MAX_META (1u << 16)

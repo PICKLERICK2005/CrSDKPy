@@ -376,6 +376,31 @@ class Session:
         self._op_events.clear()
         return taken
 
+    def _operation_boundary(self, operation, code):
+        reader = getattr(self._backend, "operation_boundary", None)
+        return reader(self._id, operation, code) if reader is not None else None
+
+    @staticmethod
+    def _after_boundary(event, boundary):
+        if boundary is None:
+            return True  # simulator / custom backend, no native provenance
+        native = event.native
+        if native is None:
+            return False  # do not substitute delivery time for native ordering
+        distance = (native.sequence - boundary.sequence) & 0xFFFFFFFF
+        return (
+            0 < distance < 0x80000000 and native.timestamp_ms >= boundary.timestamp_ms
+        )
+
+    def _take_operation_events(self, types):
+        selected = []
+        retained = deque()
+        while self._op_events:
+            event = self._op_events.popleft()
+            (selected if isinstance(event, types) else retained).append(event)
+        self._op_events = retained
+        return selected
+
     # -- autofocus ---------------------------------------------------------
     def autofocus(self, *, timeout_ms: int = 3_000) -> FocusResult:
         """Assert the half-press stage and wait for a focus verdict.
@@ -440,11 +465,30 @@ class Session:
         transiently disagree, and an already-focused value may emit no
         notification at all, so no single source is sufficient.
         """
+        # Queued observations predate this S1 attempt. Keep their public
+        # evidence, but do not use them to authorize a new release. Bound the
+        # zero-timeout drain so a noisy producer cannot keep us here forever.
+        # The hosted queue holds 4096 events and polls return at most 256.
+        for _ in range(32):
+            if not self._pump(timeout_ms=0):
+                break
+        else:
+            raise AutofocusFailedError(
+                "event backlog did not quiesce before S1; no exposure requested",
+                focus_state=FocusState.UNKNOWN,
+                elapsed_ms=0,
+            )
+        self._op_events = deque(
+            event
+            for event in self._op_events
+            if not isinstance(event, (FocusEvent, CaptureEvent))
+        )
         clock = self._backend.clock
         start = clock.now_ms()
         deadline = start + max(0, int(timeout_ms))
 
         self._backend.set_half_press(self._id, True)
+        boundary = self._operation_boundary("property", 0x0001)
 
         # Sticky-value guard: if focus is already achieved, no change event
         # will fire and a notification-only wait would time out on good focus.
@@ -475,17 +519,47 @@ class Session:
                 slice_end = min(deadline, start + next_read)
             wait_ms = max(1, slice_end - now)
             self._pump(timeout_ms=wait_ms)
+            # A full IPC page may end on focus while a later contradictory
+            # observation is already queued in the next page. Include all
+            # immediately available pages before evaluating the verdict.
+            for _ in range(32):
+                if not self._pump(timeout_ms=0):
+                    break
+            else:
+                return FocusResult(
+                    confirmed=False,
+                    state=FocusState.UNKNOWN,
+                    elapsed_ms=clock.now_ms() - start,
+                )
 
-            for event in self._take_op_events():
+            # Consume only focus observations; unrelated capture/content and
+            # warning evidence must not disappear when the gate returns.
+            focus_events = []
+            retained = deque()
+            while self._op_events:
+                event = self._op_events.popleft()
                 if isinstance(event, FocusEvent):
-                    latest = event.state
-                    if event.is_focused:
-                        return FocusResult(
-                            confirmed=True,
-                            state=event.state,
-                            elapsed_ms=event.timestamp_ms - start,
-                            source=event.source,
-                        )
+                    if self._after_boundary(event, boundary):
+                        focus_events.append(event)
+                else:
+                    retained.append(event)
+            self._op_events = retained
+            # Each channel has its own enum and may lag the other. A later
+            # unlocked state invalidates that channel's earlier focus verdict,
+            # without making a lagging independent channel veto valid focus.
+            seen_sources = set()
+            for event in reversed(focus_events):
+                if event.source in seen_sources:
+                    continue
+                seen_sources.add(event.source)
+                latest = event.state
+                if event.is_focused:
+                    return FocusResult(
+                        confirmed=True,
+                        state=event.state,
+                        elapsed_ms=max(0, event.timestamp_ms - start),
+                        source=event.source,
+                    )
 
             if read_points and clock.now_ms() - start >= read_points[0]:
                 read_points.popleft()
@@ -538,7 +612,13 @@ class Session:
         capture = Capture(self, requested_ms=clock.now_ms())
         capture._baseline_content = self._content_baseline()
 
+        # Keep already-observed exposures public, but never attribute one to
+        # this new S2-only release (including custom backends without markers).
+        self._op_events = deque(
+            event for event in self._op_events if not isinstance(event, CaptureEvent)
+        )
         self._backend.send_command(self._id, Command.RELEASE, CommandParameter.DOWN)
+        capture._exposure_boundary = self._operation_boundary("command", 0)
         clock.sleep_ms(dwell_ms)
         self._backend.send_command(self._id, Command.RELEASE, CommandParameter.UP)
 
@@ -601,7 +681,13 @@ class Session:
         capture.focused_ms = clock.now_ms()
         capture._advance(CaptureState.FOCUSED)
 
+        # A notification already observed during focus cannot confirm the
+        # S2 release below. It remains available on the public event stream.
+        self._op_events = deque(
+            event for event in self._op_events if not isinstance(event, CaptureEvent)
+        )
         self._backend.send_command(self._id, Command.RELEASE, CommandParameter.DOWN)
+        capture._exposure_boundary = self._operation_boundary("command", 0)
         clock.sleep_ms(dwell_ms)
         self._backend.send_command(self._id, Command.RELEASE, CommandParameter.UP)
 
@@ -615,12 +701,18 @@ class Session:
         deadline = clock.now_ms() + max(0, int(timeout_ms))
         while clock.now_ms() < deadline:
             self._pump(timeout_ms=max(1, min(50, deadline - clock.now_ms())))
-            for event in self._take_op_events():
+            events = self._take_operation_events((CaptureEvent, ContentEvent))
+            for index, event in enumerate(events):
+                if not self._after_boundary(
+                    event, getattr(capture, "_exposure_boundary", None)
+                ):
+                    continue
                 if isinstance(event, CaptureEvent):
                     # Observed time, not the backend's own stamp: the two
                     # need not share a clock origin.
                     capture.exposed_ms = clock.now_ms()
                     capture._advance(CaptureState.EXPOSED)
+                    self._op_events.extendleft(reversed(events[index + 1 :]))
                     return
                 if isinstance(event, ContentEvent):
                     self._record_content(capture, event)
@@ -692,7 +784,7 @@ class Session:
         baseline = capture._baseline_content
         next_poll_ms = 0
         while clock.now_ms() < deadline:
-            for event in self._take_op_events():
+            for event in self._take_operation_events(ContentEvent):
                 if isinstance(event, ContentEvent):
                     self._record_content(capture, event)
             if capture.content is not None:

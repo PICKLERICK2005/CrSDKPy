@@ -411,18 +411,24 @@ void dispatch(const crsdkpy_ipc_request& request,
     case CRSDKPY_OP_SET_PROPERTY: {
         // The value rides in the 64-bit handle-sized slot alongside the
         // session handle, so a full vendor value survives the boundary.
-        const int32_t status = crsdkpy_set_property(
+        crsdkpy_event_boundary boundary = {};
+        const int32_t status = crsdkpy_set_property_timed(
             request.handle, request.u32_arg,
             (static_cast<int64_t>(request.i32_arg2) << 32) |
-                (static_cast<uint32_t>(request.i32_arg)));
+                (static_cast<uint32_t>(request.i32_arg)), &boundary);
+        meta_tail.resize(sizeof(boundary));
+        std::memcpy(meta_tail.data(), &boundary, sizeof(boundary));
         fill(response, status, categorise(status), "");
         if (status != CRSDKPY_OK) attach_bridge_error(response);
         return;
     }
 
     case CRSDKPY_OP_SEND_COMMAND: {
-        const int32_t status = crsdkpy_send_command(
-            request.handle, request.u32_arg, request.i32_arg);
+        crsdkpy_event_boundary boundary = {};
+        const int32_t status = crsdkpy_send_command_timed(
+            request.handle, request.u32_arg, request.i32_arg, &boundary);
+        meta_tail.resize(sizeof(boundary));
+        std::memcpy(meta_tail.data(), &boundary, sizeof(boundary));
         fill(response, status, categorise(status), "");
         if (status != CRSDKPY_OK) attach_bridge_error(response);
         return;

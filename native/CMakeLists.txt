@@ -28,6 +28,9 @@ enable_testing()
 add_executable(crsdkpy_protocol_test test/protocol_contract_test.cpp)
 target_include_directories(crsdkpy_protocol_test PRIVATE include host)
 add_test(NAME protocol_contract COMMAND crsdkpy_protocol_test)
+add_executable(crsdkpy_abi_layout_test test/abi_layout_test.c)
+target_include_directories(crsdkpy_abi_layout_test PRIVATE include)
+add_test(NAME abi_layout COMMAND crsdkpy_abi_layout_test)
 
 if(NOT DEFINED CRSDK_ROOT)
   message(FATAL_ERROR
