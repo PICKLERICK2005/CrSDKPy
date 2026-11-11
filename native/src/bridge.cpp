@@ -13,6 +13,7 @@
 //   * Close is idempotent.
 
 #include "crsdkpy_abi.h"
+#include "sony_counted_string.h"
 
 #include <atomic>
 #include <chrono>
@@ -849,7 +850,6 @@ public:
         crsdkpy_event event;
         std::memset(&event, 0, sizeof(event));
         event.kind = kind;
-        event.timestamp_ms = now_ms();
         event.code = code;
         event.i0 = i0;
         event.i1 = i1;
@@ -859,10 +859,25 @@ public:
             std::lock_guard<std::mutex> lock(mutex_);
             // Bound the queue: a client that stops polling must not grow it
             // without limit. Oldest events are dropped first.
-            if (queue_.size() >= kMaxQueued) queue_.pop_front();
+            event.timestamp_ms = now_ms();
+            ++event_sequence_;
+            std::memcpy(&event.reserved, &event_sequence_, sizeof(event_sequence_));
+            if (queue_.size() >= kMaxQueued) {
+                queue_.pop_front();
+                ++dropped_events_;
+            }
             queue_.push_back(event);
         }
         condition_.notify_all();
+    }
+
+    void mark(crsdkpy_event_boundary* boundary)
+    {
+        if (!boundary) return;
+        std::lock_guard<std::mutex> lock(mutex_);
+        boundary->sequence = event_sequence_;
+        boundary->dropped_count = dropped_events_;
+        boundary->timestamp_ms = now_ms();
     }
 
     uint32_t drain(crsdkpy_event* out, uint32_t capacity, int32_t timeout_ms)
@@ -895,6 +910,8 @@ private:
     std::mutex mutex_;
     std::condition_variable condition_;
     std::deque<crsdkpy_event> queue_;
+    uint32_t event_sequence_ = 0;
+    uint32_t dropped_events_ = 0;
 
     std::mutex transfer_gate_;
     std::mutex transfer_mutex_;
@@ -1588,7 +1605,19 @@ int32_t crsdkpy_property_string(uint64_t handle, uint32_t code, char* out,
     if (error != SDK::CrError_None) return static_cast<int32_t>(error);
 
     // Copied before the owning list is released, like every other read here.
-    const std::string text = to_utf8(raw[0].GetCurrentStr());
+    if (raw[0].GetValueType() != SDK::CrDataType_STR)
+        return CRSDKPY_ERR_UNSUPPORTED;
+    const auto* current = raw[0].GetCurrentStr();
+    // CurrentStr has no independent allocation-size accessor. GetValueSize
+    // describes the separate advertised values array, NOT CurrentStr. Trust
+    // the vendor-owned allocation's count, as Sony's reference does; bound
+    // every subsequent read to that declared span and validate its framing.
+    std::string text;
+    if (!current || !sony_counted_string(current,
+            static_cast<size_t>(current[0]) + 1, text)) {
+        set_error("malformed Sony counted UTF-16 property string");
+        return CRSDKPY_ERR_INVALID_ARG;
+    }
     *out_length = static_cast<uint32_t>(text.size());
     if (capacity == 0) return CRSDKPY_OK;  // sizing call
     if (text.size() + 1 > capacity) return CRSDKPY_ERR_BUFFER_TOO_SMALL;
@@ -1597,6 +1626,12 @@ int32_t crsdkpy_property_string(uint64_t handle, uint32_t code, char* out,
 }
 
 int32_t crsdkpy_set_property(uint64_t handle, uint32_t code, int64_t value)
+{
+    return crsdkpy_set_property_timed(handle, code, value, nullptr);
+}
+
+int32_t crsdkpy_set_property_timed(uint64_t handle, uint32_t code, int64_t value,
+                                   crsdkpy_event_boundary* boundary)
 {
     set_error("");  // never inherit a previous failure's text
     std::lock_guard<std::mutex> lock(g_mutex);
@@ -1629,6 +1664,7 @@ int32_t crsdkpy_set_property(uint64_t handle, uint32_t code, int64_t value)
     }
 
     property.SetCurrentValue(static_cast<CrInt64u>(value));
+    session->mark(boundary);
     const auto error = SDK::SetDeviceProperty(session->handle(), &property);
     if (error != SDK::CrError_None) {
         set_error("the camera rejected the property write");
@@ -1785,6 +1821,12 @@ int32_t crsdkpy_get_lens_information(uint64_t handle, crsdkpy_lens_info* out,
 
 int32_t crsdkpy_send_command(uint64_t handle, uint32_t command_id, int32_t parameter)
 {
+    return crsdkpy_send_command_timed(handle, command_id, parameter, nullptr);
+}
+
+int32_t crsdkpy_send_command_timed(uint64_t handle, uint32_t command_id,
+                                  int32_t parameter, crsdkpy_event_boundary* boundary)
+{
     set_error("");
     std::lock_guard<std::mutex> lock(g_mutex);
     auto session = resolve(handle);
@@ -1795,6 +1837,7 @@ int32_t crsdkpy_send_command(uint64_t handle, uint32_t command_id, int32_t param
         return CRSDKPY_ERR_INVALID_ARG;
     }
 
+    session->mark(boundary);
     const auto error = SDK::SendCommand(
         session->handle(), static_cast<CrInt32u>(command_id),
         static_cast<SDK::CrCommandParam>(parameter));

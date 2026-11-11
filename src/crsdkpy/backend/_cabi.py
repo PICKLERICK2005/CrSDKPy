@@ -55,7 +55,7 @@ __all__ = [
 ]
 
 ABI_VERSION_MAJOR = 1
-ABI_VERSION_MINOR = 5
+ABI_VERSION_MINOR = 6
 
 #: Environment variable holding an explicit path to the built bridge.
 LIBRARY_ENV_VAR = "CRSDKPY_BRIDGE"
@@ -245,6 +245,14 @@ class FrameInfoStruct(ctypes.Structure):
     ]
 
 
+class EventBoundaryStruct(ctypes.Structure):
+    _fields_ = [
+        ("sequence", c_uint32),
+        ("dropped_count", c_uint32),
+        ("timestamp_ms", c_int64),
+    ]
+
+
 class EventStruct(ctypes.Structure):
     _fields_ = [
         ("kind", c_int32),
@@ -348,6 +356,21 @@ def _declare(lib: ctypes.CDLL) -> None:
 
     lib.crsdkpy_get_property.restype = c_int32
     lib.crsdkpy_get_property.argtypes = [c_uint64, c_uint32, POINTER(PropertyStruct)]
+
+    lib.crsdkpy_set_property_timed.restype = c_int32
+    lib.crsdkpy_set_property_timed.argtypes = [
+        c_uint64,
+        c_uint32,
+        c_int64,
+        POINTER(EventBoundaryStruct),
+    ]
+    lib.crsdkpy_send_command_timed.restype = c_int32
+    lib.crsdkpy_send_command_timed.argtypes = [
+        c_uint64,
+        c_uint32,
+        c_int32,
+        POINTER(EventBoundaryStruct),
+    ]
 
     lib.crsdkpy_set_property.restype = c_int32
     lib.crsdkpy_set_property.argtypes = [c_uint64, c_uint32, c_int64]

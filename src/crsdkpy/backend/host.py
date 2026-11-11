@@ -971,7 +971,7 @@ class HostBackend(
         handle = self._handle(session_id, "set_property")
         raw = int(value)
         # Split across the two 32-bit slots so a full vendor value fits.
-        self._call(
+        _, _, tail = self._call_ex(
             _ipc.OP_SET_PROPERTY,
             handle=handle,
             u32=int(code),
@@ -979,15 +979,21 @@ class HostBackend(
             i32_2=(raw >> 32) & 0xFFFFFFFF,
             operation="set_property",
         )
+        boundary = _ipc.from_bytes(_cabi.EventBoundaryStruct, tail)
+        self._remember_boundary(session_id, "property", int(code), boundary)
 
     def send_command(self, session_id: str, command: Any, parameter: Any) -> None:
         handle = self._handle(session_id, "send_command")
-        self._call(
+        _, _, tail = self._call_ex(
             _ipc.OP_SEND_COMMAND,
             handle=handle,
             u32=command_to_abi(command),
             i32=parameter_to_abi(parameter),
             operation="send_command",
+        )
+        boundary = _ipc.from_bytes(_cabi.EventBoundaryStruct, tail)
+        self._remember_boundary(
+            session_id, "command", command_to_abi(command), boundary
         )
 
     # -- framing -----------------------------------------------------------

@@ -54,7 +54,7 @@ extern "C" {
  * refused at load rather than at the first call into the part that is
  * missing. */
 #define CRSDKPY_ABI_VERSION_MAJOR 1
-#define CRSDKPY_ABI_VERSION_MINOR 5
+#define CRSDKPY_ABI_VERSION_MINOR 6
 
 /* ---- status codes ---------------------------------------------------- */
 #define CRSDKPY_OK                    0
@@ -318,7 +318,7 @@ typedef struct crsdkpy_frame_info {
 
 typedef struct crsdkpy_event {
     int32_t  kind;
-    int32_t  reserved;
+    int32_t  reserved;       /* uint32 callback enqueue sequence bits, ABI >= 1.6 */
     int64_t  timestamp_ms;   /* bridge monotonic clock */
     uint32_t code;           /* property code, warning code, or 0 */
     int32_t  i0;             /* state / focus value / source */
@@ -326,6 +326,21 @@ typedef struct crsdkpy_event {
     int32_t  i2;
     int64_t  i3;             /* content id and other wide payloads */
 } crsdkpy_event;
+
+/* Callback enqueue watermark immediately before a vendor write/command.
+ * timestamp_ms is the bridge clock, never the Python clock. sequence uses
+ * unsigned modulo-2^32 ordering; the reserved event word carries its bits. */
+typedef struct crsdkpy_event_boundary {
+    uint32_t sequence;
+    uint32_t dropped_count;
+    int64_t timestamp_ms;
+} crsdkpy_event_boundary;
+
+CRSDKPY_API int32_t crsdkpy_set_property_timed(
+    uint64_t handle, uint32_t code, int64_t value, crsdkpy_event_boundary* boundary);
+CRSDKPY_API int32_t crsdkpy_send_command_timed(
+    uint64_t handle, uint32_t command, int32_t parameter,
+    crsdkpy_event_boundary* boundary);
 
 /* ---- library ---------------------------------------------------------- */
 

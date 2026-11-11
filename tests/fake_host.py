@@ -202,7 +202,9 @@ def make_property(code: int, value: int) -> _cabi.PropertyStruct:
 
 def make_event(kind: int, code: int, i0: int = 0, i1: int = 0,
                i2: int = 0) -> _cabi.EventStruct:
+    STATE["event_sequence"] = STATE.get("event_sequence", 0) + 1
     event = _cabi.EventStruct()
+    event.reserved = STATE["event_sequence"]
     event.kind = kind
     event.code = code
     event.i0 = i0
@@ -557,6 +559,8 @@ def handle_request(out, request_id: int, meta: bytes, blob: bytes = b"") -> bool
         return True
 
     if op == _ipc.OP_SEND_COMMAND:
+        boundary = _cabi.EventBoundaryStruct(
+            sequence=STATE.get("event_sequence", 0), timestamp_ms=1234)
         # A successful release clears the half-press stage, as characterized.
         if request.u32_arg in (0, 7) and request.i32_arg == 0:
             STATE["properties"][0x0001] = 1
@@ -578,7 +582,7 @@ def handle_request(out, request_id: int, meta: bytes, blob: bytes = b"") -> bool
             current = STATE["properties"].get(CODE_RECORDING_STATE, 0)
             STATE["properties"][CODE_RECORDING_STATE] = 0 if current else 1
             STATE["events"].append(make_event(1, CODE_RECORDING_STATE))
-        respond(out, request_id)
+        respond(out, request_id, tail=_ipc.as_bytes(boundary))
         return True
 
     if op == _ipc.OP_CONFIGURE_POSTVIEW:
@@ -714,6 +718,8 @@ def handle_request(out, request_id: int, meta: bytes, blob: bytes = b"") -> bool
         return True
 
     if op == _ipc.OP_SET_PROPERTY:
+        boundary = _cabi.EventBoundaryStruct(
+            sequence=STATE.get("event_sequence", 0), timestamp_ms=1234)
         if request.u32_arg == 0x0707:   # FocusIndication is read-only
             respond(out, request_id, status=-11, category=_ipc.CAT_UNSUPPORTED,
                     message=b"the camera reports this property as not settable")
@@ -728,7 +734,7 @@ def handle_request(out, request_id: int, meta: bytes, blob: bytes = b"") -> bool
         STATE["events"].append(make_event(1, request.u32_arg))
         if request.u32_arg == 0x0001:
             _drive_autofocus(engaged=value == 2)
-        respond(out, request_id)
+        respond(out, request_id, tail=_ipc.as_bytes(boundary))
         return True
 
     if op == _ipc.OP_GET_PROPERTY:

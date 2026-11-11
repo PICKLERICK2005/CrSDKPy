@@ -2,6 +2,42 @@
 
 Dates are the day the change was validated, not the day it was released.
 
+## 0.1.0b4 — unreleased, 2026-11-11
+
+### Fixed
+
+- Focus gates reject already-queued focus evidence and a focused notification
+  contradicted later by the same channel in a received batch. Independent focus
+  channels remain independent. Unrelated operation events remain available.
+- Capture notifications already observed before release, or enqueued before
+  the native S2-call boundary but delivered later, do not confirm a new release.
+- Hosted property string/value requests use the documented unsigned property
+  code field throughout. Nonzero codes now reach the native metadata endpoints.
+
+### Added
+
+- Native callback enqueue timestamps, raw kind/code and modulo-32-bit sequence
+  provenance on events, while retaining existing public delivery timestamps and
+  constructor signatures. S1/property and command responses carry native call
+  watermarks and cumulative queue-drop counters.
+
+### Compatibility and validation
+
+- Native ABI 1.6, IPC 1.3. Rebuild and deploy the host and bridge together from
+  this source before using this Python version. Existing fixed wire/ABI layouts
+  and legacy C entry points remain unchanged. Older clients can ignore the
+  additive response tails; this client refuses older native peers explicitly.
+- The default S2 hold remains 35 ms. No retries, photographic-setting changes,
+  readiness waits or NR workarounds are introduced.
+- This candidate is offline Python/native/protocol tested, not physically
+  accepted. Operator-reported A7 IV successes at 35 ms occurred on the prior
+  baseline and do not constitute hardware validation of these changes.
+- Bridge callback entry/enqueue order is not camera generation time. A callback
+  delayed inside the vendor runtime cannot establish absolute event freshness.
+  Mechanical/Long Exposure NR readiness remains a separate unresolved issue.
+
+See `docs/AF_EVENT_CORRECTNESS_RELEASE.md` for deployment and acceptance limits.
+
 ## 0.1.0b3 — 2026-08-27
 
 **A beta. The new surface in this release is simulator, native and protocol

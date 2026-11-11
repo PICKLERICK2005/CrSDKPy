@@ -24,6 +24,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
 
+enable_testing()
+add_executable(crsdkpy_counted_string_test test/counted_string_test.cpp)
+target_include_directories(crsdkpy_counted_string_test PRIVATE include)
+add_test(NAME counted_string COMMAND crsdkpy_counted_string_test)
+add_executable(crsdkpy_protocol_test test/protocol_contract_test.cpp)
+target_include_directories(crsdkpy_protocol_test PRIVATE include host)
+add_test(NAME protocol_contract COMMAND crsdkpy_protocol_test)
+add_executable(crsdkpy_abi_layout_test test/abi_layout_test.c)
+target_include_directories(crsdkpy_abi_layout_test PRIVATE include)
+add_test(NAME abi_layout COMMAND crsdkpy_abi_layout_test)
+
 if(NOT DEFINED CRSDK_ROOT)
   message(FATAL_ERROR
     "CRSDK_ROOT is not set.\n"

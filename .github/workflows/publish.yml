@@ -15,8 +15,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - run: python -m pip install --upgrade pip build
-      - run: python -m build
+      # Publish the reviewed distributions, not a fresh CI rebuild.
+      - name: Download and verify approved release assets
+        env:
+          RELEASE_URL: ${{ github.event.release.url }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: python .github/scripts/fetch_release_assets.py
       - uses: actions/upload-artifact@v4
         with:
           name: distributions
