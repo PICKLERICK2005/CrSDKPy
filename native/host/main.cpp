@@ -507,7 +507,7 @@ void dispatch(const crsdkpy_ipc_request& request,
     }
 
     case CRSDKPY_OP_PROPERTY_VALUES: {
-        const uint32_t code = static_cast<uint32_t>(request.i32_arg);
+        const uint32_t code = crsdkpy_ipc_property_code(&request);
         uint32_t count = 0;
         int32_t kind = 0;
         int32_t status = crsdkpy_property_values(request.handle, code, nullptr,
@@ -539,7 +539,7 @@ void dispatch(const crsdkpy_ipc_request& request,
     }
 
     case CRSDKPY_OP_PROPERTY_STRING: {
-        const uint32_t code = static_cast<uint32_t>(request.i32_arg);
+        const uint32_t code = crsdkpy_ipc_property_code(&request);
         uint32_t length = 0;
         int32_t status = crsdkpy_property_string(request.handle, code, nullptr,
                                                  0, &length);

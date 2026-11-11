@@ -168,6 +168,12 @@ typedef struct crsdkpy_ipc_request {
     char     text[208]; /* device key or adapter directory, NUL terminated */
 } crsdkpy_ipc_request;
 
+/* All property endpoints, including string/value metadata, use u32_arg. */
+static inline uint32_t crsdkpy_ipc_property_code(const crsdkpy_ipc_request* request)
+{
+    return request->u32_arg;
+}
+
 typedef struct crsdkpy_ipc_response {
     int32_t  status;      /* 0 ok; negative bridge code; positive vendor code */
     int32_t  category;    /* CRSDKPY_CAT_* */
