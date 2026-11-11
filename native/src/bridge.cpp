@@ -13,6 +13,7 @@
 //   * Close is idempotent.
 
 #include "crsdkpy_abi.h"
+#include "sony_counted_string.h"
 
 #include <atomic>
 #include <chrono>
@@ -1604,7 +1605,19 @@ int32_t crsdkpy_property_string(uint64_t handle, uint32_t code, char* out,
     if (error != SDK::CrError_None) return static_cast<int32_t>(error);
 
     // Copied before the owning list is released, like every other read here.
-    const std::string text = to_utf8(raw[0].GetCurrentStr());
+    if (raw[0].GetValueType() != SDK::CrDataType_STR)
+        return CRSDKPY_ERR_UNSUPPORTED;
+    const auto* current = raw[0].GetCurrentStr();
+    // CurrentStr has no independent allocation-size accessor. GetValueSize
+    // describes the separate advertised values array, NOT CurrentStr. Trust
+    // the vendor-owned allocation's count, as Sony's reference does; bound
+    // every subsequent read to that declared span and validate its framing.
+    std::string text;
+    if (!current || !sony_counted_string(current,
+            static_cast<size_t>(current[0]) + 1, text)) {
+        set_error("malformed Sony counted UTF-16 property string");
+        return CRSDKPY_ERR_INVALID_ARG;
+    }
     *out_length = static_cast<uint32_t>(text.size());
     if (capacity == 0) return CRSDKPY_OK;  // sizing call
     if (text.size() + 1 > capacity) return CRSDKPY_ERR_BUFFER_TOO_SMALL;
