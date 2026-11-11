@@ -1,10 +1,8 @@
-# 0.1.0b4 event correctness and metadata repair — release candidate notes
+# 0.1.0b4 event correctness and metadata repair
 
-Prepared on `fix/a7iv-focus-event-queue` from `9bce8c2`. The original checkout,
-installed dependency, SPTFS, PyKS2 and historical records remain unchanged.
-The earlier candidate and regression evidence are retained in
-`A7IV_FOCUS_EVENT_QUEUE_REVIEW.md`; this revision adds native provenance and
-call boundaries rather than treating an empty event poll as proof of freshness.
+Released on 2026-11-11. This document describes the general-purpose SDK changes,
+compatibility contract and remaining callback limitations. Body-specific
+acceptance is recorded in [A7 IV validation](A7IV_VALIDATION.md).
 
 ## Event correction
 
@@ -63,90 +61,54 @@ is no dual-field workaround or camera-specific special case. Nonzero string,
 enum and range requests have independent regression tests. The C++ protocol
 test validates the shared native field accessor with conflicting signed fields
 and high-bit unsigned codes; Python fake-host tests validate value recovery.
-Real-camera metadata recovery on the rebuilt binary remains a hardware check.
+Real-camera string, enum and range recovery passed on the A7 IV;
+see [A7 IV validation](A7IV_VALIDATION.md).
 
 ## Native compatibility and deployment
 
-- Python package candidate: **0.1.0b4**, not stable or hardware accepted.
-- Native ABI **1.6**: two added timed entry points and one added boundary POD;
-  old entry points and POD sizes remain intact. New Python requires this minor.
-- IPC **1.3**: additive response tails are required for command/property
-  provenance; older hosts are rejected during handshake. Existing clients can
-  ignore the tails when using a new host. No header/request/response size changes.
-- Build and stage the matching `crsdkpy_host.exe` and `crsdkpy_bridge.dll`
-  together beside the operator-supplied Sony runtime. Do not replace only the
-  executable. The native build remains independent of the pure-Python wheel.
-- Vendor runtime files, binaries and private diagnostics must not enter the
-  Python distribution. No production install, publish, push, merge or tag has
-  been performed.
+- Python 0.1.0b4 requires native ABI 1.6 and IPC 1.3. Rebuild and deploy the host
+  and bridge together beside the separately supplied Sony runtime.
+- Timed entry points and boundary metadata are additive; legacy entry points
+  and fixed POD/wire layouts are retained. New Python rejects older peers at
+  negotiation. Older b3 clients can ignore the new host's response tails.
+- Event constructors and delivery timestamps remain compatible. Serialized
+  dataclasses include optional native provenance; strict consumers must permit
+  that additive field.
+- No shutter timing, automatic retry, photographic-setting or NR workaround
+  is introduced. The default S2 hold remains 35 ms.
+- Vendor runtime files and private acceptance evidence are not SDK source and
+  must not be redistributed with the Python package.
 
-Hardware-free native tests are registered with CTest. The existing general
-hardware selftest is disabled in this review build and must not be run without
-separate authorization. Independently check the built bridge ABI/exports and
-real host handshake/start/shutdown without discovery or opening sessions.
+## Counted-string correction
 
-## Hardware evidence and next acceptance
+Sony CurrentStr begins with a uint16 payload count including its terminating
+NUL. The bridge validates string type and framing, excludes the count word and
+encodes UTF-16 to UTF-8, including surrogate pairs. Empty count 0 and count 1
+plus NUL are supported; malformed termination or surrogates fail without partial
+output. This is not an unconditional leading-character strip.
 
-Operator-reported baseline A7 IV electronic-shutter/35 ms results include 12/12
-and 36/36 turntable captures plus one recovery frame, with 49/49 originals
-ingested. A 200 ms hold is therefore not universally necessary. Mechanical
-NR-On failures and improved NR-Off results do not establish the complete
-readiness mechanism; this patch does not disable NR or alter exposure choices.
+GetValueSize describes the separate advertised-values buffer, not CurrentStr.
+The vendor supplies no independent CurrentStr allocation-size accessor, so the
+bridge must trust the allocation's declared span. The standalone decoder tests
+explicit spans and rejects truncated fixtures. Measured firmware/lens strings,
+Unicode, empty values and malformed input have native regression coverage.
 
-Before adopting this candidate, separately authorize a read-only rebuilt-host
-metadata/provenance check, then a stationary one-shot AF-S test using the
-existing 35 ms default. Review its complete event/command/content evidence before
-any second shot. Follow with deliberate pre-queued-event and focus-rejection
-acceptance without blindly repeating an uncertain logical shot. Test MF/S2 and
-interruption/no-reshoot separately. Long exposures and NR-On processing need a
-measured readiness/timeout workstream; no fixed sleep or setting rewrite is a fix.
+## Validation
 
-## Final review validation
+Release acceptance used a wheel-installed candidate with matching rebuilt host
+and bridge: four AF-S plus one MF exposure identified on ILCE-7M4, with exact
+identities and clean shutdown. Both Remote and RemoteTransfer read-only metadata
+checks passed. See A7IV_VALIDATION.md for the narrow hardware scope.
 
-- Full Python suite with the rebuilt bridge available: **560 passed, 1 skipped**.
-  The skip is the deliberately absent-bridge scenario; a bridge is present here.
-- CTest: **2 passed** (C ABI/header layouts and C++ metadata protocol contract).
-- Full Ruff over src/tests/tools, compileall and git diff --check: passed.
-- Independent rebuilt-host startup/shutdown used initialization only, without
-  enumeration, session opening or camera commands. Timed C ABI functions reject
-  invalid handles. Native build hashes and detailed results are retained in the
-  ignored `native/build/independent-validation.json`.
-- New Python rejects the installed ABI 1.5 / IPC 1.2 binaries with a rebuild
-  instruction. Old Python 0.1.0b3 starts/stops the new host and binds the retained
-  legacy C entry points on ABI 1.6.
-- The 0.1.0b4 wheel and sdist build without installation. Inspection excludes
-  native build outputs, proprietary runtime libraries and private diagnostics.
-  The sanitized `docs/characterization` reference remains legitimate source
-  documentation; it is not the excluded top-level private capture directory.
+Release-time software validation passed 563 Python tests with one expected skip
+(the absent-bridge case when a bridge is present), plus three hardware-free
+CTest contracts: ABI layout, metadata IPC and counted strings. Release publishing
+checks subsequently added five tests. Compatibility checks exercised old-client /
+new-host negotiation and explicit rejection of old hosts by the new client.
 
-### Files for review
+Callback enqueue provenance cannot date camera event generation inside the
+vendor runtime. A delayed callback may cross an operation boundary. Same-batch
+contradictions and already-queued exposure notifications have software regression
+coverage; successful captures do not by themselves prove every failure path.
+Mechanical shutter / Long Exposure NR On readiness remains a separate issue.
 
-Event handling and provenance:
-
-- `src/crsdkpy/session.py`
-- `src/crsdkpy/events.py`
-- `src/crsdkpy/backend/native.py`
-- `src/crsdkpy/backend/host.py`
-- `src/crsdkpy/backend/_cabi.py`
-- `src/crsdkpy/backend/_ipc.py`
-- `native/src/bridge.cpp`
-- `native/include/crsdkpy_abi.h`
-- `native/host/ipc_protocol.h`
-- `tests/fake_host.py`
-- `tests/test_focus_event_queue.py`
-- `tests/test_native_event_boundaries.py`
-
-The independent metadata fix is the PROPERTY_STRING/PROPERTY_VALUES dispatch
-change in `native/host/main.cpp`, its shared u32-code accessor in
-`native/host/ipc_protocol.h`, and `tests/test_metadata_ipc_contract.py`.
-It shares no autofocus sequencing or settings workaround.
-
-Build/release and native contracts:
-
-- `native/CMakeLists.txt`
-- `native/test/protocol_contract_test.cpp`
-- `native/test/abi_layout_test.c`
-- `src/crsdkpy/__init__.py`
-- `CHANGELOG.md`
-- `docs/A7IV_FOCUS_EVENT_QUEUE_REVIEW.md`
-- `docs/AF_EVENT_CORRECTNESS_RELEASE.md`

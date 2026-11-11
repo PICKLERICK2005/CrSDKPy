@@ -19,11 +19,19 @@ anywhere in the codebase.
 
 ```text
 Hardware validated:  ILME-FX3A, firmware 2.02, CRSDK 2.02.00, USB
+                     ILCE-7M4, firmware 6.01, CRSDK 2.02.00, USB
+                     (limited feature scope; see validation report)
 
 Other CRSDK-compatible bodies:
                      expected to work according to the capabilities they
                      report, but not yet hardware-validated
 ```
+
+The A7 IV's 0.1.0b4 acceptance covers four gated AF-S captures and one MF/S2-only
+capture with electronic shutter and the default 35 ms hold, exact media identity,
+capture-event provenance and clean shutdown. Read-only property/string/value-set
+access was also verified. See [A7 IV validation](docs/A7IV_VALIDATION.md) for the
+tested scope and remaining limits; FX3A validation does not transfer to that body.
 
 ## Sony Camera Remote SDK dependency
 
@@ -508,6 +516,8 @@ python examples/camera_adapter.py
   lifecycle.
 * [`docs/FX3_CHARACTERIZATION.md`](docs/FX3_CHARACTERIZATION.md): the hardware
   measurements the design is based on.
+* [`docs/A7IV_VALIDATION.md`](docs/A7IV_VALIDATION.md): the A7 IV's measured
+  0.1.0b4 acceptance scope and remaining limitations.
 * [`src/crsdkpy/profiles/`](src/crsdkpy/profiles/): the sanitized conformance
   profile of the reference body, and what a comparison is measured against.
 * `python -m crsdkpy`: what is installed, what is missing, and where CrSDKPy
@@ -532,6 +542,10 @@ python -m twine check dist/*
 Three separate columns, because they are three separate claims. "Tested" means
 the automated suite covers it against the simulator, the fake host, or both;
 "hardware" means it has been exercised on a real camera.
+
+The table below retains the FX3A validation scope. The A7 IV's narrower,
+separately recorded scope is listed in `docs/A7IV_VALIDATION.md` and the
+per-body section of `docs/FEATURE_MATRIX.md`.
 
 | Area | Implemented | Tested | Hardware |
 |---|:---:|:---:|:---:|
@@ -564,8 +578,9 @@ anything, so no zoom has ever moved.
 
 Known limitations:
 
-- Validated on one body so far. A second body is the next validation step, as
-  a test of the generic architecture rather than a new backend.
+- Hardware validation covers the FX3A reference body and a limited A7 IV
+  acceptance scope. A pass on either body does not validate all features on
+  another model, lens, shutter mode or connection transport.
 - Everything added after the core is simulator- and protocol-tested but, with
   the exceptions marked above, **not yet hardware-validated**. Treat those
   surfaces as working-by-construction rather than proven.

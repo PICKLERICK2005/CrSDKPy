@@ -45,6 +45,9 @@ prune captures
 prune artifacts
 prune probes
 prune test_scripts
+prune docs/internal
+prune tools/internal
+prune tests/internal
 
 global-exclude *.dll *.so *.dylib *.lib *.exp *.obj *.o *.exe *.pdb *.ilk
 global-exclude *.pyc *.pyo

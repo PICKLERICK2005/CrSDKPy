@@ -307,7 +307,7 @@
         "screennail": true
       }
     },
-    "key_finding": "Remote + HostCard is the recommended single-session mode for SPTFS: provides live view, AF, capture, and exact RAM postview without a mode switch. RemoteTransfer is required only for content index / screennail access.",
+    "key_finding": "Remote + HostCard is the recommended single-session mode for applications: provides live view, AF, capture, and exact RAM postview without a mode switch. RemoteTransfer is required only for content index / screennail access.",
     "postview_config_vs_delivery": "Postview configuration acceptance and postview delivery are independent capabilities. SetDeviceSetting rejection does not imply non-delivery.",
     "confidence": "measured"
   },
@@ -577,7 +577,7 @@
     }
   ],
 
-  "sptfs_recommendations": {
+  "application_recommendations": {
     "recommended_session_mode": "Remote + Host PC + Memory Card",
     "rationale": "Single session providing live view, AF, capture, and exact RAM postview. RemoteTransfer needed only for content index / screennail access; requires disconnect/reconnect.",
     "preview_strategy": "Use live-view frame (~504ms) as immediate feedback, replace with RAM postview (~683ms) when available in Remote+HostCard, or screennail (~902ms) via RemoteTransfer session if needed",
