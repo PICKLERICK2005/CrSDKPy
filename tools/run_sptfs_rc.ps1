@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$StageRoot,
     [Parameter(Mandatory = $true)][string]$SptfsRoot,
-    [switch]$HelpOnly
+    [switch]$HelpOnly,
+    [switch]$RequireAfS
 )
 $ErrorActionPreference = 'Stop'
 $stage = (Resolve-Path -LiteralPath $StageRoot).Path
@@ -31,6 +32,8 @@ try {
     try {
         if ($HelpOnly) {
             & $python controller.py --help
+        } elseif ($RequireAfS) {
+            & $python (Join-Path $PSScriptRoot 'run_sptfs_afs_gate.py') --sptfs-root $source --closure-dir (Join-Path $stage 'evidence') --camera sony --sony-autofocus auto --sony-afs-dwell-ms 35 --sony-capture-trace (Join-Path $stage 'evidence\captures') --data-root (Join-Path $stage 'data')
         } else {
             # Startup does not request a photograph. Operator scan commands
             # require separate authorization; nothing is piped to the REPL.

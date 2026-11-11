@@ -1,5 +1,10 @@
 # A7 IV 0.1.0b4 release-candidate hardware gate
 
+The initial stage and its five captures are preserved as MF-only evidence:
+the operator confirmed the lens switch was MF throughout. The revised gate and
+counted-string rebuild are documented in A7IV_B4_COUNTED_STRINGS.md. Use that
+document's new stage and AF-S guard; do not reuse old acceptance for new binaries.
+
 This gate uses an installed wheel in a dedicated venv and matching native
 ABI 1.6 / IPC 1.3 binaries. The original 0.1.0b3 checkout, environment and native
 runtime are not overwritten. SPTFS source, its camera-neutral contract, PyKS2
