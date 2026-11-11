@@ -111,4 +111,3 @@ vendor runtime. A delayed callback may cross an operation boundary. Same-batch
 contradictions and already-queued exposure notifications have software regression
 coverage; successful captures do not by themselves prove every failure path.
 Mechanical shutter / Long Exposure NR On readiness remains a separate issue.
-
