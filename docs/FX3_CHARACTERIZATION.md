@@ -209,7 +209,7 @@ Connection control mode and save destination are independent configuration axes.
 
 **Postview configuration acceptance ≠ postview delivery.** `SetDeviceSetting(EnablePostView)` is rejected in Remote mode (error `0x8402`), but postview bytes are still delivered in Remote + Host+Card. Check delivery empirically; do not infer from config acceptance.
 
-**Remote + Host+Card is the recommended single-session mode for SPTFS:** provides continuous live view, AF, still capture, and exact RAM postview delivery without a mode switch. RemoteTransfer is only needed when content index, screennail, or thumbnail access is required.
+**Remote + Host+Card is the recommended single-session mode for applications:** provides continuous live view, AF, still capture, and exact RAM postview delivery without a mode switch. RemoteTransfer is only needed when content index, screennail, or thumbnail access is required.
 
 **Property count differs by mode.** Remote exposes 394 properties; RemoteTransfer exposes 392. The two extra codes in Remote (`0x581`, `0x582`) likely correspond to live-view properties. Property count must not be used as a session health assertion. CrSDKPy must preserve unknown numeric property codes.
 
@@ -354,7 +354,7 @@ rather than model-gated conditionals.
 
 ---
 
-## Preview path comparison (SPTFS context)
+## Preview path comparison (application context)
 
 | Use case | Path | Format | Size | Trigger → bytes | Mode |
 |---|---|---|---|---|---|
@@ -363,7 +363,7 @@ rather than model-gated conditionals.
 | Smallest exact-still preview | Thumbnail | JPEG | ~56 KB, 160×120 | ~944 ms | RemoteTransfer |
 | Fastest visual (not exact-still) | Live-view frame | JPEG | 27–87 KB, 640×428 | ~504 ms | Remote only |
 
-**Recommended SPTFS session:** `Remote + Host PC + Memory Card`. Provides:
+**Recommended application session:** `Remote + Host PC + Memory Card`. Provides:
 
 - Continuous live-view preview (~29 fps) for operator framing
 - Autofocus with S1-gated S2 capture
@@ -401,9 +401,9 @@ If adding an A7 requires `if model == "A7":` anywhere, the architecture failed.
 | `Camera` | model, firmware, transport, identity | Mode transitions, reconnects |
 | `Session` | control_mode, destination, connection state, observed capabilities | Single CRSDK connection |
 
-Mode transitions (`Remote` ↔ `RemoteTransfer`) replace the `Session` while the `Camera` survives. The Python API exposes `Camera.open(mode, destination)` → `Session`. SPTFS should never need to reference a specific Sony mode or property code.
+Mode transitions (`Remote` ↔ `RemoteTransfer`) replace the `Session` while the `Camera` survives. The Python API exposes `Camera.open(mode, destination)` → `Session`. Applications can keep mode and property details within their camera adapter.
 
-### SPTFS layering
+### Application layering
 
 ```
 Sony body
@@ -414,12 +414,13 @@ CrSDKPy native bridge (C ABI shim + ctypes)
 ↓
 CrSDKPy Python API (Camera / Session / capabilities)
 ↓
-SPTFS Sony adapter (autofocus_and_capture, get_preview, ...)
+Application camera adapter (autofocus_and_capture, preview, ...)
 ↓
-SPTFS camera-neutral interface
+Application interface
 ```
 
-SPTFS should never see: S1, S2, CRSDK enums, RemoteTransfer, AFWarningExt, Sony handle lists, or content control codes.
+The adapter can encapsulate S1, S2, CRSDK enums, RemoteTransfer, AFWarningExt,
+Sony handle lists and content control codes.
 
 ### Simulator / fake backend
 

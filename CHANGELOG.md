@@ -2,7 +2,7 @@
 
 Dates are the day the change was validated, not the day it was released.
 
-## 0.1.0b4 — unreleased, 2026-11-11
+## 0.1.0b4 — 2026-11-11
 
 ### Fixed
 
@@ -13,6 +13,11 @@ Dates are the day the change was validated, not the day it was released.
   the native S2-call boundary but delivered later, do not confirm a new release.
 - Hosted property string/value requests use the documented unsigned property
   code field throughout. Nonzero codes now reach the native metadata endpoints.
+- Sony string properties decode the counted UTF-16 payload rather than its
+  leading length word. The count includes the terminating NUL; output is UTF-8.
+  Empty strings, termination, surrogate pairs and malformed framing have native
+  regression coverage. Firmware `6.01` and lens name/version were verified on
+  the A7 IV through the corrected host IPC path.
 
 ### Added
 
@@ -29,9 +34,12 @@ Dates are the day the change was validated, not the day it was released.
   additive response tails; this client refuses older native peers explicitly.
 - The default S2 hold remains 35 ms. No retries, photographic-setting changes,
   readiness waits or NR workarounds are introduced.
-- This candidate is offline Python/native/protocol tested, not physically
-  accepted. Operator-reported A7 IV successes at 35 ms occurred on the prior
-  baseline and do not constitute hardware validation of these changes.
+- Released artifacts passed Sony ILCE-7M4 firmware 6.01 / CRSDK 2.02.00 USB
+  acceptance: four gated AF-S captures and one MF/S2-only capture, all identified,
+  electronic shutter, unchanged 35 ms hold. Native capture-event provenance,
+  exact media identities and clean shutdown were verified. Read-only metadata
+  checks exercised Remote and RemoteTransfer. This does not establish A7 IV
+  validation for every library feature; see `docs/A7IV_VALIDATION.md`.
 - Bridge callback entry/enqueue order is not camera generation time. A callback
   delayed inside the vendor runtime cannot establish absolute event freshness.
   Mechanical/Long Exposure NR readiness remains a separate unresolved issue.

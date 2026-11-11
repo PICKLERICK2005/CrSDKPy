@@ -23,11 +23,34 @@ USB, Cr_PTP_USB, PID 0x0F52
 
 Other CRSDK-compatible bodies are expected to work according to the
 capabilities they report, because there is no model-name branching anywhere in
-the library. That expectation is **not** hardware-validated. The next
-validation round is intended to be a second body, which tests the generic
-architecture rather than adding a second backend.
+the library. That expectation is **not** hardware-validated. ILCE-7M4 has the
+limited, separately measured scope below; no other body is implied.
+
+## A7 IV validation — 0.1.0b4
+
+Sony ILCE-7M4 firmware 6.01, FE 20–70mm F4 G lens firmware 02,
+CRSDK 2.02.00, Windows USB hosted backend; native ABI 1.6 / IPC 1.3.
+
+| Feature | A7 IV evidence |
+|---|---|
+| Discovery, connection and clean close | Verified during acceptance and read-only metadata sessions |
+| Remote / RemoteTransfer property reads | Verified; firmware/lens strings and advertised enum/range recovery through corrected IPC |
+| MF / S2-only still capture | 1/1 identified, electronic shutter, 35 ms default |
+| Gated AF-S capture | 4/4 identified; lens AF, effective AF-S, S1/focus gate exercised |
+| Capture-event provenance and exact content identity | Verified for all five captures; one S2 DOWN/UP pair each |
+| Half-press cleanup after successful AF-S | Verified for all four AF-S captures |
+| Still destination | Read-only checks; no destination-write acceptance in this gate |
+| Other AF modes, focus failure, forced reconnect, property writes | Not established by this acceptance gate |
+| Live view, video, previews, original download/cancellation, lens driving | Not established by this acceptance gate |
+| Mechanical shutter / Long Exposure NR On readiness | Separate unresolved investigation |
+
+See [A7 IV validation](A7IV_VALIDATION.md) for exact scope and provenance limits.
+The five-frame sample establishes this acceptance gate, not universal reliability.
 
 ## Matrix
+
+The following matrix and its footnotes describe the **FX3A reference body**.
+Do not apply its hardware claims to the A7 IV or other bodies.
 
 | Feature | Implemented | Simulator-tested | Hardware-validated |
 |---|:---:|:---:|:---:|
