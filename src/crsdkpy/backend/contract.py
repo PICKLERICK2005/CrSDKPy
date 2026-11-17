@@ -37,6 +37,7 @@ from ..enums import (
     SessionMode,
     StillDestination,
 )
+from ..errors import UnsupportedOperationError
 from ..events import Event
 from ..previews import LiveViewFrame, Preview
 from ..properties import Property, PropertyCode
@@ -157,6 +158,14 @@ class Backend:
 
     #: Short identifier used in diagnostics, e.g. ``"simulator"``.
     name: str = "backend"
+    supports_owned_downloads = False
+
+    def start_owned_content_download(self, session_id, content, destination,
+                                    operation_id):
+        """Bind callbacks to this unique filename before tagging their ID."""
+        raise UnsupportedOperationError(
+            "backend lacks attributed original downloads",
+            capability="original_transfer_identity", operation="content.download")
 
     @property
     def clock(self) -> Clock:  # pragma: no cover - interface

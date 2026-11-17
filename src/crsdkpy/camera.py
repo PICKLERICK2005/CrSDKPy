@@ -140,13 +140,29 @@ class Camera:
         session_id = self._backend.open_session(
             self._info.device_key, mode, destination, reconnect
         )
-        session = Session(self, self._backend, session_id, mode)
+        try:
+            session = Session(self, self._backend, session_id, mode)
+        except BaseException as primary:
+            # Opening the backend succeeded; projection/initial event reads did
+            # not. The caller never receives a Session to close this resource.
+            try:
+                self._backend.close_session(session_id)
+            except Exception as cleanup:
+                primary.lifecycle_cleanup_errors = (cleanup,)
+            raise
         self._sessions.append(session)
         return session
 
     def close_sessions(self) -> None:
+        error = None
         for session in list(self._sessions):
-            session.close()
+            try:
+                session.close()
+            except Exception as exc:
+                if error is None:
+                    error = exc
+        if error is not None:
+            raise error
 
     def _forget_session(self, session: Session) -> None:
         if session in self._sessions:

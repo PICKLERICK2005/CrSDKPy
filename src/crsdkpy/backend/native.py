@@ -452,6 +452,8 @@ def decode_event(
     from ..events import NativeEventInfo
 
     event = _decode_event(raw, timestamp_ms=timestamp_ms)
+    if isinstance(event, TransferEvent):
+        object.__setattr__(event, "_operation_id", int(raw.i3) or None)
     object.__setattr__(
         event,
         "native",
@@ -1369,6 +1371,17 @@ class NativeBackend(
         self._measurements.postview_delivered.add(session_id)
         data = bytes(bytearray(buffer[: size.value]))
         return build_postview(data, info, timestamp_ms=self._clock.now_ms())
+
+    supports_owned_downloads = True
+
+    def start_owned_content_download(self, session_id, content, destination,
+                                    operation_id):
+        handle = self._handle(session_id, "start_content_download")
+        self._require_content_mode(
+            session_id, "start_content_download", "original_transfer")
+        _cabi.check(self._lib, self._lib.crsdkpy_start_owned_content_download(
+            handle, int(content.slot), int(content.content_id), int(content.file_id),
+            destination.encode("utf-8"), int(operation_id)), "start_content_download")
 
     def start_content_download(
         self, session_id: str, content: ContentRef, destination: str

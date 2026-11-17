@@ -48,7 +48,7 @@ extern "C" {
  * indistinguishable from a camera that lacks the feature. The minor is what
  * lets the client refuse a too-old host during the handshake instead. */
 #define CRSDKPY_IPC_VERSION_MAJOR 1
-#define CRSDKPY_IPC_VERSION_MINOR 3
+#define CRSDKPY_IPC_VERSION_MINOR 4
 
 /* Refuse absurd frames rather than attempting a huge allocation. */
 #define CRSDKPY_IPC_MAX_META (1u << 16)
@@ -102,6 +102,7 @@ extern "C" {
  * area and is enabled only after a successful execute. */
 #define CRSDKPY_OP_EXECUTE_FRAMING          27
 #define CRSDKPY_OP_UPDATE_FRAMING_AREA      28
+#define CRSDKPY_OP_START_OWNED_CONTENT_DOWNLOAD 29
 /* Test-only: makes the host terminate abruptly so process-death handling can
  * be exercised without provoking a real native fault. */
 #define CRSDKPY_OP_TEST_CRASH      900
@@ -198,7 +199,7 @@ typedef struct crsdkpy_ipc_content_args {
     int32_t  kind;
     int32_t  timeout_ms;
     uint32_t reserved;
-    uint32_t reserved2;
+    uint32_t reserved2; /* OP_START_OWNED: reserved/reserved2 are low/high ID */
 } crsdkpy_ipc_content_args;
 
 /* Extra arguments for the framing operations.

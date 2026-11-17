@@ -160,3 +160,145 @@ def test_native_backend_selection_is_explicit() -> None:
 def test_unknown_backend_name_raises() -> None:
     with pytest.raises(ValueError, match="unknown backend"):
         crsdkpy.SDK(backend="nikon")
+
+
+def test_failed_session_initialization_closes_backend_handle(camera, monkeypatch):
+    backend = camera._backend
+    close = backend.close_session
+    closed = []
+
+    def fail_poll(*args):
+        raise crsdkpy.BackendError("initial read failed")
+
+    def record_close(handle):
+        closed.append(handle)
+        close(handle)
+
+    monkeypatch.setattr(backend, "poll_events", fail_poll)
+    monkeypatch.setattr(backend, "close_session", record_close)
+    with pytest.raises(crsdkpy.BackendError, match="initial read failed"):
+        camera.open("remote")
+    assert len(closed) == 1
+    assert camera.sessions == []
+
+
+@pytest.mark.parametrize("reappear", [False, True])
+def test_rediscovery_keeps_session_ownership_and_identity(monkeypatch, reappear):
+    sdk = make_sdk()
+    camera = sdk.discover()[0]
+    session = camera.open("remote")
+    enumerate_cameras = sdk.backend.enumerate_cameras
+    monkeypatch.setattr(sdk.backend, "enumerate_cameras", lambda: [])
+    assert sdk.discover() == []
+    assert sdk.camera_by_key(camera.device_key) is camera
+    if reappear:
+        monkeypatch.setattr(sdk.backend, "enumerate_cameras", enumerate_cameras)
+        assert sdk.discover()[0] is camera
+    sdk.close()
+    assert session.closed and not sdk.started
+
+
+def test_close_failure_does_not_skip_other_sessions_or_shutdown(monkeypatch):
+    sdk = make_sdk()
+    camera = sdk.discover()[0]
+    first = camera.open("remote")
+    second = camera.open("remote_transfer")
+    backend = sdk.backend
+    close = backend.close_session
+    shutdown = backend.shutdown
+    calls = []
+
+    def close_one(handle):
+        calls.append(handle)
+        if handle == first._id and calls.count(handle) == 1:
+            raise crsdkpy.BackendError("close failed")
+        close(handle)
+
+    def stop():
+        calls.append("shutdown")
+        shutdown()
+
+    monkeypatch.setattr(backend, "close_session", close_one)
+    monkeypatch.setattr(backend, "shutdown", stop)
+    with pytest.raises(crsdkpy.BackendError, match="close failed"):
+        sdk.close()
+    # The simulator's shutdown also cleans the backend handle whose close failed.
+    assert calls[:3] == [first._id, second._id, "shutdown"]
+    assert first.closed and second.closed and camera.sessions == []
+    assert not sdk.started
+    sdk.close()  # successful shutdown remains idempotent despite reported close error
+
+
+def test_failed_shutdown_is_not_reported_as_stopped(monkeypatch):
+    sdk = make_sdk()
+    shutdown = sdk.backend.shutdown
+
+    def fail():
+        raise crsdkpy.BackendError("shutdown failed")
+
+    monkeypatch.setattr(sdk.backend, "shutdown", fail)
+    with pytest.raises(crsdkpy.BackendError, match="shutdown failed"):
+        sdk.close()
+    assert sdk.started
+    monkeypatch.setattr(sdk.backend, "shutdown", shutdown)
+    sdk.close()
+    assert not sdk.started
+
+
+def test_failed_open_retains_primary_when_backend_cleanup_also_fails(
+    camera, monkeypatch
+):
+    backend = camera._backend
+    primary, cleanup = (
+        crsdkpy.BackendError("initial read"),
+        crsdkpy.BackendError("close"),
+    )
+
+    def read(*args):
+        raise primary
+
+    def close(*args):
+        raise cleanup
+
+    with monkeypatch.context() as patch:
+        patch.setattr(backend, "poll_events", read)
+        patch.setattr(backend, "close_session", close)
+        with pytest.raises(crsdkpy.BackendError) as error:
+            camera.open("remote")
+        assert error.value is primary
+        assert error.value.lifecycle_cleanup_errors == (cleanup,)
+
+
+def test_session_context_close_does_not_mask_primary(camera, monkeypatch):
+    session = camera.open("remote")
+    primary, cleanup = crsdkpy.BackendError("capture"), crsdkpy.BackendError("close")
+
+    def close(*args):
+        raise cleanup
+
+    with monkeypatch.context() as patch:
+        patch.setattr(camera._backend, "close_session", close)
+        with pytest.raises(crsdkpy.BackendError) as error:
+            with session:
+                raise primary
+        assert error.value is primary
+        assert error.value.lifecycle_cleanup_errors == (cleanup,)
+
+
+def test_sdk_context_shutdown_does_not_mask_primary(monkeypatch):
+    sdk = make_sdk()
+    primary, cleanup = crsdkpy.BackendError("body"), crsdkpy.BackendError("shutdown")
+
+    def shutdown():
+        raise cleanup
+
+    try:
+        with monkeypatch.context() as patch:
+            patch.setattr(sdk.backend, "shutdown", shutdown)
+            with pytest.raises(crsdkpy.BackendError) as error:
+                with sdk:
+                    raise primary
+            assert error.value is primary and sdk.started
+            assert error.value.lifecycle_cleanup_errors == (cleanup,)
+    finally:
+        sdk.close()

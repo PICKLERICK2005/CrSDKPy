@@ -123,9 +123,11 @@ a backend describing something this release has never heard of stays usable.
   every transfer.
 - **Unsupported operations raise** `UnsupportedOperationError` naming the
   capability, rather than returning something falsy.
-- **A busy camera raises `CameraBusyError`, not a connection error.** It is
-  transient and the same call is expected to work shortly afterwards, so do not
-  tear the session down over it. The vendor code is on `backend_code`; the first
+- **A busy camera raises `CameraBusyError`, not a connection error.** Read-only
+  operations may succeed later without tearing down the session. After a possible
+  shutter release, a transient error is never permission to repeat the exposure;
+  retain capture evidence and reconcile the uncertain outcome first. The vendor
+  code is on `backend_code`; the first
   content listing after opening a RemoteTransfer session is the case that
   actually occurs, failing in about a millisecond with `0x8D05`.
 - **You choose who recovers a dropped link.** `Camera.open()` takes a

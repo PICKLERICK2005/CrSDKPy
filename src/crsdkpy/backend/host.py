@@ -1120,6 +1120,20 @@ class HostBackend(
             return None  # nothing written yet
         return blob.decode("utf-8") if blob else None
 
+    supports_owned_downloads = True
+
+    def start_owned_content_download(self, session_id, content, destination,
+                                    operation_id):
+        handle = self._handle(session_id, "start_content_download")
+        self._require_content_mode(
+            session_id, "start_content_download", "original_transfer")
+        args = _ipc.ContentArgsStruct(slot=content.slot,
+            content_id=content.content_id, file_id=content.file_id,
+            reserved=operation_id & 0xFFFFFFFF, reserved2=operation_id >> 32)
+        self._call_ex(_ipc.OP_START_OWNED_CONTENT_DOWNLOAD, handle=handle,
+            operation="start_content_download",
+            extra=_ipc.as_bytes(args), blob=destination.encode("utf-8"))
+
     def start_content_download(
         self, session_id: str, content: ContentRef, destination: str
     ) -> None:

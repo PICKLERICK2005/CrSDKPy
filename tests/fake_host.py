@@ -40,6 +40,8 @@ Run as ``python fake_host.py [behaviour]``. Behaviours:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import os
 import struct
 import sys
@@ -211,6 +213,8 @@ def make_event(kind: int, code: int, i0: int = 0, i1: int = 0,
     event.i1 = i1   # focus events use this to name the reporting channel
     event.i2 = i2   # transfer events use this to flag an available path
     event.timestamp_ms = 1234
+    if kind == _cabi.EVENT_TRANSFER:
+        event.i3 = STATE.get("download_id", 0)
     return event
 
 
@@ -403,7 +407,7 @@ def handle_request(out, request_id: int, meta: bytes, blob: bytes = b"") -> bool
             respond(out, request_id, count=0)
         return True
 
-    if op == _ipc.OP_START_CONTENT_DOWNLOAD:
+    if op in (_ipc.OP_START_CONTENT_DOWNLOAD, _ipc.OP_START_OWNED_CONTENT_DOWNLOAD):
         if BEHAVIOUR == "download_start_failure":
             respond(out, request_id, status=0x1234, category=_ipc.CAT_VENDOR,
                     message=b"start rejected")
@@ -413,6 +417,8 @@ def handle_request(out, request_id: int, meta: bytes, blob: bytes = b"") -> bool
                     message=b"one transfer is already active")
             return True
         STATE["transfer_active"] = True
+        STATE["download_id"] = (content_args.reserved | (content_args.reserved2 << 32)
+            if op == _ipc.OP_START_OWNED_CONTENT_DOWNLOAD else 0)
         STATE["transfer_terminal"] = False
         STATE["transfer_destination"] = blob.decode("utf-8")
         STATE["transfer_polls"] = 0
@@ -424,6 +430,7 @@ def handle_request(out, request_id: int, meta: bytes, blob: bytes = b"") -> bool
             STATE["events"].append(make_event(
                 _cabi.EVENT_TRANSFER, 0x20101, 100, _cabi.TRANSFER_FAILED, 0))
             STATE["transfer_path"] = STATE["transfer_destination"]
+            Path(STATE["transfer_destination"]).write_bytes(b"II*\0fake-original")
             STATE["transfer_active"] = False
             STATE["transfer_terminal"] = True
         respond(out, request_id)
@@ -491,6 +498,7 @@ def handle_request(out, request_id: int, meta: bytes, blob: bytes = b"") -> bool
         _ipc.OP_LIVE_VIEW_INFO,
         _ipc.OP_LIVE_VIEW_FRAME,
         _ipc.OP_START_CONTENT_DOWNLOAD,
+        _ipc.OP_START_OWNED_CONTENT_DOWNLOAD,
         _ipc.OP_CANCEL_CONTENT_DOWNLOAD,
     ):
         respond(out, request_id, status=-5, category=_ipc.CAT_STALE_HANDLE,
@@ -523,6 +531,7 @@ def handle_request(out, request_id: int, meta: bytes, blob: bytes = b"") -> bool
                     1 if outcome == _cabi.TRANSFER_OK else 0))
                 if outcome == _cabi.TRANSFER_OK:
                     STATE["transfer_path"] = STATE["transfer_destination"]
+                    Path(STATE["transfer_destination"]).write_bytes(b"II*\0fake-original")
                 STATE["transfer_active"] = False
                 STATE["transfer_terminal"] = True
         # A file-writing transfer reports progress and then an outcome through

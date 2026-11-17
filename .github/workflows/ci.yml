@@ -8,6 +8,18 @@ permissions:
   contents: read
 
 jobs:
+  native-contracts:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake -S native -B native/build -DCRSDKPY_CONTRACT_TESTS_ONLY=ON
+      - run: cmake --build native/build --config Release
+      - run: ctest --test-dir native/build -C Release --output-on-failure
+
   test:
     runs-on: ${{ matrix.os }}
     strategy:

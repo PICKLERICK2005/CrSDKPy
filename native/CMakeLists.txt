@@ -25,6 +25,9 @@ set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
 
 enable_testing()
+add_executable(crsdkpy_download_identity_test test/download_identity_test.cpp)
+target_include_directories(crsdkpy_download_identity_test PRIVATE include)
+add_test(NAME download_identity COMMAND crsdkpy_download_identity_test)
 add_executable(crsdkpy_counted_string_test test/counted_string_test.cpp)
 target_include_directories(crsdkpy_counted_string_test PRIVATE include)
 add_test(NAME counted_string COMMAND crsdkpy_counted_string_test)
@@ -34,6 +37,12 @@ add_test(NAME protocol_contract COMMAND crsdkpy_protocol_test)
 add_executable(crsdkpy_abi_layout_test test/abi_layout_test.c)
 target_include_directories(crsdkpy_abi_layout_test PRIVATE include)
 add_test(NAME abi_layout COMMAND crsdkpy_abi_layout_test)
+
+option(CRSDKPY_CONTRACT_TESTS_ONLY
+  "Build standalone ABI/IPC/string tests without the Sony runtime" OFF)
+if(CRSDKPY_CONTRACT_TESTS_ONLY)
+  return()
+endif()
 
 if(NOT DEFINED CRSDK_ROOT)
   message(FATAL_ERROR

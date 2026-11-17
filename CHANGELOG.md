@@ -2,6 +2,36 @@
 
 Dates are the day the change was validated, not the day it was released.
 
+## 0.1.0rc1 — unreleased
+
+- Close backend sessions when initial session construction fails; retain known
+  cameras across discovery snapshots so SDK shutdown still owns their sessions.
+- Continue closing remaining sessions and attempt backend shutdown after a close
+  error, while reporting failures instead of claiming successful cleanup.
+- Fail transfer waits promptly when the session is closed or unusable, and
+  record cancellation only after the backend accepts it.
+- Reject mismatched content identities in direct content-preview requests, using
+  the same conservative policy as capture previews.
+- Add standalone native ABI/IPC/counted-string contract builds without Sony's
+  runtime, with Windows/Linux CI coverage configured.
+- Stage original downloads privately; validate owned completion, path, regular
+  file identity and known size before exclusive publication or atomic overwrite.
+  Preserve old destinations on failed transfers and quarantine uncertain writers.
+- Bind native file callbacks to operation-unique filenames before attaching request
+  IDs. Add ABI 1.7 / IPC 1.4 owned-download entry points without widening fixed
+  structs; retain legacy entry points. Development clients reject older peers.
+- Preserve primary post-release errors and exposure evidence, attempt existing S1
+  cleanup for gated captures, and report cleanup uncertainty without any S2 retry.
+- Serialize cancellation against the next download, retain ownership through
+  publication, and preserve primary errors across context-manager close failures.
+- Match callback names exactly, with Windows-only separator normalization and
+  no case/Unicode folding; reject truncated, foreign and late request names.
+
+These are development changes, not a stable release or new hardware acceptance.
+The candidate is not 0.1.0 final; remaining gates are listed in
+`docs/STABLE_RELEASE_READINESS.md`. The accepted b4 ABI 1.6 / IPC 1.3 artifacts stay
+unchanged. This source needs a rebuilt ABI 1.7 / IPC 1.4 pair. Capture dwell stays 35 ms.
+
 ## 0.1.0b4 — 2026-11-11
 
 ### Fixed

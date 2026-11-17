@@ -10,6 +10,24 @@ from crsdkpy._jpeg import jpeg_dimensions, looks_complete
 from crsdkpy.simulator import Scenario
 
 
+@pytest.mark.parametrize("numeric", [False, True])
+def test_content_preview_rejects_wrong_image_identity(
+    transfer_session, monkeypatch, numeric
+):
+    from dataclasses import replace
+
+    content = transfer_session.capture().wait_for_content()
+    backend = transfer_session._backend
+    preview = backend.get_preview(
+        transfer_session._id, content.content_id, crsdkpy.PreviewKind.THUMBNAIL
+    )
+    wrong = replace(preview, content_id=content.content_id + 1)
+    monkeypatch.setattr(backend, "get_preview", lambda *args: wrong)
+    with pytest.raises(crsdkpy.CameraConnectionError, match="stale image") as error:
+        transfer_session.content.preview(content.content_id if numeric else content)
+    assert error.value.operation == "content.preview"
+
+
 def test_live_view_frame_is_never_an_exact_still(session: crsdkpy.Session) -> None:
     frame = session.live_view.get_frame()
     assert isinstance(frame, crsdkpy.LiveViewFrame)
