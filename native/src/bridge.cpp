@@ -15,6 +15,7 @@
 #include "crsdkpy_abi.h"
 #include "sony_counted_string.h"
 #include "download_identity.h"
+#include "live_view_payload.h"
 
 #include <atomic>
 #include <chrono>
@@ -2347,26 +2348,31 @@ int32_t crsdkpy_get_live_view_frame(uint64_t handle, uint8_t* out,
     if (capacity == 0) return CRSDKPY_OK;  // sizing call
     if (capacity < needed) return CRSDKPY_ERR_BUFFER_TOO_SMALL;
 
-    // The vendor writes into the caller's buffer, so no vendor-owned
-    // allocation exists at any point and nothing needs copying out of one.
+    // Sony's receive allocation includes framing. GetImageData(), not its
+    // allocation base, identifies the image body. Keep both block and backing
+    // storage alive through the checked copy; never guess a header length.
+    std::vector<uint8_t> receive(needed);
     SDK::CrImageDataBlock block;
     block.SetSize(needed);
-    block.SetData(out);
+    block.SetData(receive.data());
     error = SDK::GetLiveViewImage(session->handle(), &block);
+    if (error == SDK::CrWarning_Frame_NotUpdated) {
+        out_info->byte_length = 0;
+        return CRSDKPY_ERR_NOT_FOUND;
+    }
+    if (error == SDK::CrError_Memory_Insufficient) {
+        set_error("the live-view receive allocation was insufficient; frame not copied");
+        return CRSDKPY_ERR_BUFFER_TOO_SMALL;
+    }
     if (error != SDK::CrError_None) {
         set_error("the camera did not return a live-view frame");
         return static_cast<int32_t>(error);
     }
-    const uint32_t produced = block.GetImageSize();
-    if (produced == 0) {
-        // Nothing new. Ordinary around an exposure; the stream resumes.
-        return CRSDKPY_ERR_NOT_FOUND;
-    }
-    out_info->byte_length = produced > needed ? needed : produced;
-    out_info->frame_number = block.GetFrameNo();
-    out_info->time_code = block.GetTimeCode();
-    out_info->fetched_ms = now_ms();
-    return CRSDKPY_OK;
+    const int32_t status = crsdkpy::copy_live_view_payload(
+        receive.data(), needed, block, out, capacity, out_info, now_ms());
+    if (status == CRSDKPY_ERR_INVALID_ARG)
+        set_error("the live-view image pointer/size is outside its receive allocation");
+    return status;
 }
 
 int32_t crsdkpy_take_content_preview(uint64_t handle, uint8_t* out,

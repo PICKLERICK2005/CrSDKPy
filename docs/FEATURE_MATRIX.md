@@ -67,6 +67,14 @@ candidate remain unvalidated. This does not revalidate rc1 physical capture.
 rc2 adds a software-tested Windows complete-staging-path preflight budget of
 239 UTF-16 units; it does not change the accepted short-path transfer sequence.
 
+## A7 IV live-view candidate status — 0.1.0rc3
+
+The rc2 live-view gate failed JPEG payload validation; its evidence is retained.
+rc3 corrects native image-pointer extraction and validates JPEG/IPC lengths in
+software. No corrected rc3 live-view hardware pass is claimed yet. See
+[live-view payload ownership](LIVE_VIEW_PAYLOAD.md). The separately accepted
+rc1 original download and historical b4 capture evidence retain their scopes.
+
 ## Matrix
 
 The following matrix and its footnotes describe the **FX3A reference body**.

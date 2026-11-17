@@ -1,7 +1,7 @@
 # 0.1.0 stable readiness
 
 Target: 0.1.0 final. This is a development review, not release authorization.
-The corrected unpublished candidate is 0.1.0rc2, not 0.1.0 final.
+The corrected unpublished candidate is 0.1.0rc3, not 0.1.0 final.
 The starting reference is main at 3cd1ec002b78f4fe944bf4594bf20876ce1678bf.
 Published 0.1.0b4, its artifacts and accepted ABI 1.6 / IPC 1.3 pair remain
 unchanged. No new camera validation is claimed.
@@ -65,7 +65,8 @@ with its cause after a possible release, so it cannot promise no exposure.
    shutdown have passed. Local hashing did not establish independent source-side
    cryptographic equality. rc2 only adds a Windows UTF-16 staging-path refusal;
    the successful transfer sequence is unchanged. Separately authorize bounded
-   live-view and existing-original cancellation/quarantine checks. Existing b4
+   live-view with rc3's corrected GetImageData() extraction (the rc2 gate failed
+   payload validation), and existing-original cancellation/quarantine checks. Existing b4
    AF-S/MF acceptance is retained, not relabelled as this build's capture gate.
 
 ## Important nonblocking findings and explicit limits

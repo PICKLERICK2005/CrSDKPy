@@ -730,15 +730,16 @@ def decode_live_view_info(raw: _cabi.LiveViewInfoStruct) -> LiveViewInfo:
 def build_live_view_frame(
     data: bytes, info: _cabi.FrameInfoStruct, *, timestamp_ms: int
 ) -> LiveViewFrame:
-    """Wrap one frame.
-
-    Geometry is parsed from the frame when possible and falls back to what the
-    info call reported. Unlike a capture preview, an unreadable live-view frame
-    is not fatal: the stream is best-effort and the caller will get another.
-    """
+    """Validate one JPEG payload; image-info geometry is not JPEG evidence."""
     parsed = jpeg_dimensions(data)
-    width, height = parsed if parsed else (int(info.width) or None,
-                                           int(info.height) or None)
+    if (int(info.byte_length) != len(data) or not is_jpeg(data)
+            or not data.endswith(b"\xff\xd9") or parsed is None):
+        raise CameraConnectionError(
+            "invalid live-view JPEG payload (length, SOI/EOI or geometry); "
+            "refusing to label receive framing or truncated bytes as an image",
+            operation="get_live_view_frame",
+        )
+    width, height = parsed
     return LiveViewFrame(
         data=data,
         mime="image/jpeg",
@@ -749,7 +750,7 @@ def build_live_view_frame(
         metadata={
             "byte_length": len(data),
             "time_code": int(info.time_code),
-            "geometry_source": "frame" if parsed else "info",
+            "geometry_source": "frame",
         },
     )
 

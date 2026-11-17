@@ -658,6 +658,14 @@ def handle_request(out, request_id: int, meta: bytes, blob: bytes = b"") -> bool
         # Sizes vary frame to frame, as they do on real hardware.
         size = 28_000 + (number * 997) % 59_000
         data = synth_jpeg(number, size, LIVE_VIEW_WIDTH, LIVE_VIEW_HEIGHT)
+        if BEHAVIOUR == "live_view_offset_payload":
+            data = b"\xf4\x03" + b"\x00" * 1010 + data
+        elif BEHAVIOUR == "live_view_truncated_payload":
+            data = data[:-10]
+        elif BEHAVIOUR == "live_view_bad_geometry":
+            data = b"\xff\xd8broken\xff\xd9"
+        elif BEHAVIOUR == "live_view_actual_geometry":
+            data = synth_jpeg(number, size, 1024, 680)
         info = _cabi.FrameInfoStruct(
             byte_length=len(data),
             frame_number=number,
@@ -666,6 +674,12 @@ def handle_request(out, request_id: int, meta: bytes, blob: bytes = b"") -> bool
             time_code=number * 33,
             fetched_ms=number * 33,
         )
+        if BEHAVIOUR == "live_view_wrong_length":
+            info.byte_length += 1
+        if BEHAVIOUR == "live_view_wrong_ipc_count":
+            respond(out, request_id, blob=data, count=len(data)+1, item_size=1,
+                    tail=_ipc.as_bytes(info))
+            return True
         respond(out, request_id, blob=data, count=len(data), item_size=1,
                 tail=_ipc.as_bytes(info))
         return True

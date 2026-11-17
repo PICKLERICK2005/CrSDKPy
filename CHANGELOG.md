@@ -2,7 +2,20 @@
 
 Dates are the day the change was validated, not the day it was released.
 
-## 0.1.0rc2 — unreleased
+## 0.1.0rc3 — unreleased
+
+- Copy live-view JPEG bytes from Sony's GetImageData()/GetImageSize() rather
+  than the receive allocation prefix. Validate the returned pointer and complete
+  range; use overlap-safe copying and reject inconsistent sizes without truncation.
+- Treat Frame_NotUpdated as no new frame and report insufficient receive buffers
+  explicitly. Preserve frame number/time-code metadata and ABI 1.7 / IPC 1.4 layouts.
+- Reject malformed/truncated live-view JPEGs and inconsistent hosted frame lengths.
+  Derive displayed geometry from the JPEG, not fallback image-info dimensions.
+- Add camera-free native offset/overlap/bounds and hosted JPEG regressions.
+  The A7 IV rc2 failed frame is preserved; rc3 physical revalidation is pending.
+  Original-download acceptance remains within its recorded rc1 scope.
+
+## 0.1.0rc2 — development candidate
 
 - Refuse Windows original downloads whose complete generated staging path exceeds
   a conservative 239 UTF-16-unit budget, before starting any backend transfer.

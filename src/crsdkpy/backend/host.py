@@ -1072,6 +1072,9 @@ class HostBackend(
         response, blob, tail = self._call_ex(
             _ipc.OP_LIVE_VIEW_FRAME, handle=handle, operation="get_live_view_frame"
         )
+        if response.count != len(blob) or (response.count and not tail):
+            raise BackendError("inconsistent live-view IPC payload length/metadata",
+                               operation="get_live_view_frame")
         if response.count == 0 or not tail:
             return None  # nothing new; ordinary around an exposure
         info = _ipc.from_bytes(_cabi.FrameInfoStruct, tail)
