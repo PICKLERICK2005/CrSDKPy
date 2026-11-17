@@ -75,6 +75,16 @@ software. No corrected rc3 live-view hardware pass is claimed yet. See
 [live-view payload ownership](LIVE_VIEW_PAYLOAD.md). The separately accepted
 rc1 original download and historical b4 capture evidence retain their scopes.
 
+## A7 IV live-view candidate status — 0.1.0rc4
+
+rc3 returned a JPEG beginning at byte zero, with parsed 1024×680 geometry and
+45 trailing FF bytes after EOI. Its terminal-EOI validator rejected the payload,
+so no public LiveViewFrame acceptance was established. rc4 adds a bounded
+live-view-only allowance of at most 64 FF suffix bytes, preserving raw-length
+and padding metadata. This is software-tested, not yet hardware-validated.
+Native ABI 1.7 / IPC 1.4 binaries remain unchanged from rc3. The earlier reports
+and original-download acceptance retain their documented scopes.
+
 ## Matrix
 
 The following matrix and its footnotes describe the **FX3A reference body**.

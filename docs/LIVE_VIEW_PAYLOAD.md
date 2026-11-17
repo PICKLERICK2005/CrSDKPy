@@ -43,3 +43,29 @@ frame bytes/properties before named predicates, read destination before/after,
 then verify session/SDK/host cleanup. No capture, AF, settings changes, downloads
 or cancellation is part of that gate. Original-download and cancellation
 acceptance remain separate workstreams.
+
+## rc4 bounded post-EOI normalization
+
+The retained rc3 payload was 75,392 bytes, matching both native byte_length and
+IPC count. It started with SOI, contained readable 1024×680 geometry and ended
+with EOI followed by exactly 45 FF bytes. Native extraction copies the exact
+GetImageSize() range without clamping. The evidence therefore supports a
+vendor-returned suffix, but neither headers nor reference code establish its
+intent or a universal padding/alignment maximum. No native size correction is
+inferred, and rc3 native hashes remain authoritative for rc4.
+
+Live view alone permits at most 64 trailing FF bytes, a small conservative
+allowance covering the observed 45. The raw native/IPC lengths must agree before
+normalization, and SOI must be at zero. Inspect only the bounded trailing FF run,
+requiring EOI immediately before it; do not search for an arbitrary first EOI or
+strip a receive prefix. An unpadded JPEG is returned unchanged. Other suffix
+bytes, excessive FF runs, missing EOI and unreadable positive geometry fail.
+The existing structural/header validation is retained; this is not full pixel
+or entropy-stream decoding or proof of camera-original byte integrity.
+
+Public data ends at EOI. byte_length and metadata.byte_length describe normalized
+bytes; metadata.raw_payload_length preserves the original length and
+metadata.stripped_padding_bytes records the removed suffix. Frame number,
+timestamp, time-code, kind and exact-still semantics remain. Simulator live-view
+metadata reports zero stripped bytes. Raw IPC bytes remain separate private
+evidence. Thumbnail, screennail and postview validators are not relaxed.

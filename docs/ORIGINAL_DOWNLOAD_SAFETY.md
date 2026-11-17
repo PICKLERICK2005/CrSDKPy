@@ -1,6 +1,6 @@
 # Original download safety — development contract
 
-Unpublished candidate: 0.1.0rc3. This does not authorize 0.1.0 final or deployment.
+Unpublished candidate: 0.1.0rc4. This does not authorize 0.1.0 final or deployment.
 
 On Windows the COMPLETE generated staging path must be at most 239 UTF-16
 code units, excluding its terminating NUL. Non-BMP characters count as two.

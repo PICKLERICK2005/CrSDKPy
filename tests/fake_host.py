@@ -666,6 +666,8 @@ def handle_request(out, request_id: int, meta: bytes, blob: bytes = b"") -> bool
             data = b"\xff\xd8broken\xff\xd9"
         elif BEHAVIOUR == "live_view_actual_geometry":
             data = synth_jpeg(number, size, 1024, 680)
+        elif BEHAVIOUR == "live_view_ff_padding":
+            data = synth_jpeg(number, size, 1024, 680) + b"\xff" * 45
         info = _cabi.FrameInfoStruct(
             byte_length=len(data),
             frame_number=number,

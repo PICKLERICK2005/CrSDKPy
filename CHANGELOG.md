@@ -2,7 +2,19 @@
 
 Dates are the day the change was validated, not the day it was released.
 
-## 0.1.0rc3 — unreleased
+## 0.1.0rc4 — unreleased
+
+- Normalize live-view JPEGs with at most 64 trailing FF bytes after terminal
+  EOI, retaining raw payload length and stripped-padding count in metadata.
+  Check wire/native length and SOI before normalization; reject other suffixes,
+  excessive padding, missing EOI and unreadable geometry. Still previews unchanged.
+- A7 IV rc3 returned a JPEG at offset zero with 45 trailing FF bytes, but its
+  strict terminal-EOI validator rejected it. rc4's 64-byte allowance is a bounded
+  application policy, not a Sony maximum or an inferred alignment guarantee.
+- Keep ABI 1.7 / IPC 1.4 and rc3 native binaries unchanged. Corrected rc4
+  live-view acceptance and separate cancellation acceptance remain pending.
+
+## 0.1.0rc3 — development candidate
 
 - Copy live-view JPEG bytes from Sony's GetImageData()/GetImageSize() rather
   than the receive allocation prefix. Validate the returned pointer and complete

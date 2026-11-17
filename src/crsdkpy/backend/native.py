@@ -727,28 +727,53 @@ def decode_live_view_info(raw: _cabi.LiveViewInfoStruct) -> LiveViewInfo:
     )
 
 
+# Policy allowance, not a Sony-guaranteed maximum or an alignment claim.
+# A retained A7 IV payload had 45 trailing FF bytes; keep the allowance small.
+_LIVE_VIEW_MAX_FF_PADDING = 64
+
+
 def build_live_view_frame(
     data: bytes, info: _cabi.FrameInfoStruct, *, timestamp_ms: int
 ) -> LiveViewFrame:
     """Validate one JPEG payload; image-info geometry is not JPEG evidence."""
-    parsed = jpeg_dimensions(data)
-    if (int(info.byte_length) != len(data) or not is_jpeg(data)
-            or not data.endswith(b"\xff\xd9") or parsed is None):
+    raw_length = len(data)
+    # Validate the wire/native length before considering normalization.
+    if int(info.byte_length) != raw_length or not is_jpeg(data):
         raise CameraConnectionError(
-            "invalid live-view JPEG payload (length, SOI/EOI or geometry); "
+            "invalid live-view JPEG raw payload length or SOI",
+            operation="get_live_view_frame",
+        )
+    end = raw_length
+    while end and data[end - 1] == 0xFF:
+        end -= 1
+        if raw_length - end > _LIVE_VIEW_MAX_FF_PADDING:
+            raise CameraConnectionError(
+                "invalid live-view JPEG: excessive trailing FF padding",
+                operation="get_live_view_frame",
+            )
+    padding = raw_length - end
+    # Anchor EOI immediately before the bounded suffix. Never search for an
+    # arbitrary first EOI or remove other bytes/header framing.
+    normalized = data[:end] if padding else data
+    parsed = jpeg_dimensions(normalized)
+    if not normalized.endswith(b"\xff\xd9") or parsed is None:
+        raise CameraConnectionError(
+            "invalid live-view JPEG payload (EOI or geometry); "
             "refusing to label receive framing or truncated bytes as an image",
             operation="get_live_view_frame",
         )
     width, height = parsed
     return LiveViewFrame(
-        data=data,
+        data=normalized,
         mime="image/jpeg",
         width=width,
         height=height,
         timestamp_ms=timestamp_ms,
         frame_number=int(info.frame_number),
         metadata={
-            "byte_length": len(data),
+            "byte_length": len(normalized),
+            "raw_payload_length": raw_length,
+            "stripped_padding_bytes": padding,
             "time_code": int(info.time_code),
             "geometry_source": "frame",
         },
