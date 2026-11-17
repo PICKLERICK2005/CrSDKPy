@@ -2,7 +2,20 @@
 
 Dates are the day the change was validated, not the day it was released.
 
-## 0.1.0rc4 — unreleased
+## 0.1.0rc5 — unreleased
+
+- Bound live-view FF suffix normalization at 127 bytes, matching the maximum
+  padding for the observed 128-byte alignment pattern. Three retained A7 IV
+  payloads had 45/49/72-byte suffixes; all raw lengths and rounding relationships
+  matched. This is measured configuration evidence, not a universal Sony contract.
+- Add raw_length_mod_128 and padding_matches_128_alignment diagnostics without
+  requiring alignment on other bodies. Preserve raw/public lengths and strict
+  SOI, terminal EOI, suffix, geometry and length validation. Reject 128+ padding.
+- All three private normalized JPEGs fully decoded offline with independent GDI+;
+  this does not establish new live-view hardware acceptance or camera-original
+  cryptographic equality. Native ABI 1.7 / IPC 1.4 binaries remain unchanged.
+
+## 0.1.0rc4 — development candidate
 
 - Normalize live-view JPEGs with at most 64 trailing FF bytes after terminal
   EOI, retaining raw payload length and stripped-padding count in metadata.

@@ -728,8 +728,9 @@ def decode_live_view_info(raw: _cabi.LiveViewInfoStruct) -> LiveViewInfo:
 
 
 # Policy allowance, not a Sony-guaranteed maximum or an alignment claim.
-# A retained A7 IV payload had 45 trailing FF bytes; keep the allowance small.
-_LIVE_VIEW_MAX_FF_PADDING = 64
+# Three A7 IV payloads match 128-byte FF alignment; cap at one boundary minus
+# one, without requiring alignment on other bodies or widening on future input.
+_LIVE_VIEW_MAX_FF_PADDING = 127
 
 
 def build_live_view_frame(
@@ -774,6 +775,10 @@ def build_live_view_frame(
             "byte_length": len(normalized),
             "raw_payload_length": raw_length,
             "stripped_padding_bytes": padding,
+            "raw_length_mod_128": raw_length % 128,
+            "padding_matches_128_alignment": (
+                raw_length % 128 == 0 and padding == (-len(normalized)) % 128
+            ),
             "time_code": int(info.time_code),
             "geometry_source": "frame",
         },

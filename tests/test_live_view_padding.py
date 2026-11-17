@@ -22,7 +22,7 @@ def decode(data, length=None):
     return build_live_view_frame(data, info, timestamp_ms=1234)
 
 
-@pytest.mark.parametrize('padding', [0, 1, 45, 64])
+@pytest.mark.parametrize('padding', [0, 1, 45, 49, 64, 72, 127])
 def test_bounded_ff_padding_preserves_frame_contract(padding):
     original = jpeg()
     frame = decode(original + b'\xff' * padding)
@@ -33,6 +33,8 @@ def test_bounded_ff_padding_preserves_frame_contract(padding):
     assert frame.byte_length == frame.metadata['byte_length'] == len(original)
     assert frame.metadata['raw_payload_length'] == len(original) + padding
     assert frame.metadata['stripped_padding_bytes'] == padding
+    assert frame.metadata['raw_length_mod_128'] == (len(original) + padding) % 128
+    assert frame.metadata['padding_matches_128_alignment'] is False
     assert (frame.width, frame.height) == (1024, 680)
     assert frame.frame_number == 11 and frame.timestamp_ms == 1234
     assert frame.metadata['time_code'] == 42
@@ -40,7 +42,7 @@ def test_bounded_ff_padding_preserves_frame_contract(padding):
 
 
 @pytest.mark.parametrize('data', [
-    jpeg() + b'\xff' * 65,
+    jpeg() + b'\xff' * 128,
     jpeg() + b'\x00',
     jpeg() + b'garbage\xff',
     jpeg()[:-2] + b'\xff' * 45,
@@ -77,3 +79,30 @@ def test_hosted_padding_and_simulator_metadata_are_consistent():
                 assert padding == (0 if backend == 'simulator' else 45)
                 assert frame.metadata['raw_payload_length'] == len(frame.data) + padding
                 assert frame.data.endswith(b'\xff\xd9')
+                assert frame.metadata['raw_length_mod_128'] == (
+                    frame.metadata['raw_payload_length'] % 128)
+
+
+@pytest.mark.parametrize('padding', [0, 1, 45, 49, 64, 72, 127])
+def test_alignment_diagnostics_for_aligned_payload(padding):
+    original = jpeg()
+    original = original[:-2] + b'\x00' * (512 - padding - len(original)) + original[-2:]
+    frame = decode(original + b'\xff' * padding)
+    assert frame.data == original
+    assert frame.metadata['raw_payload_length'] == 512
+    assert frame.metadata['raw_length_mod_128'] == 0
+    assert frame.metadata['padding_matches_128_alignment'] is True
+
+
+def test_zero_geometry_cannot_be_rescued_by_padding():
+    data = bytearray(jpeg())
+    data[9:11] = b'\x00\x00'
+    with pytest.raises(crsdkpy.CameraConnectionError, match='geometry'):
+        decode(bytes(data) + b'\xff' * 72)
+
+
+def test_padded_ipc_count_mismatch_is_rejected_before_normalization():
+    with crsdkpy.SDK(backend=make_backend('live_view_padded_wrong_ipc_count')) as sdk:
+        with sdk.discover()[0].open('remote') as session:
+            with pytest.raises(crsdkpy.BackendError, match='IPC payload length'):
+                session.live_view.get_frame(timeout_ms=100)

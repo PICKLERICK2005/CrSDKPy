@@ -85,6 +85,15 @@ and padding metadata. This is software-tested, not yet hardware-validated.
 Native ABI 1.7 / IPC 1.4 binaries remain unchanged from rc3. The earlier reports
 and original-download acceptance retain their documented scopes.
 
+## A7 IV live-view candidate status — 0.1.0rc5
+
+rc4 returned one validated public frame, then rejected a second with 72 FF suffix
+bytes. Three retained payloads match 128-byte FF alignment; all normalized JPEGs
+fully decoded offline at 1024×680. rc5 allows at most 127 FF suffix bytes and
+records alignment diagnostics without universally requiring alignment. This is
+software/private-fixture validation, not a new hardware pass. Native binaries
+remain unchanged; prior acceptance and failed reports retain their scopes.
+
 ## Matrix
 
 The following matrix and its footnotes describe the **FX3A reference body**.

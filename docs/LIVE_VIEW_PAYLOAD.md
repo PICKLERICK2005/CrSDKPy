@@ -69,3 +69,36 @@ metadata.stripped_padding_bytes records the removed suffix. Frame number,
 timestamp, time-code, kind and exact-still semantics remain. Simulator live-view
 metadata reports zero stripped bytes. Raw IPC bytes remain separate private
 evidence. Thumbnail, screennail and postview validators are not relaxed.
+
+## rc5 measured alignment policy
+
+Three retained A7 IV payloads independently match the following relationships:
+
+| Raw bytes | JPEG bytes | FF suffix | Raw modulo 128 |
+|---:|---:|---:|---:|
+| 75392 | 75347 | 45 | 0 |
+| 77312 | 77263 | 49 | 0 |
+| 77440 | 77368 | 72 | 0 |
+
+Each suffix equals (-JPEG_length) modulo 128. SOI is at zero, EOI is immediately
+before the FF suffix, raw/native/IPC lengths agree and geometry is 1024×680.
+Independent Windows GDI+ decoding materialized every pixel of all three private
+normalized images successfully, beyond header parsing. No images are shipped.
+The SDK headers/reference code do not promise a universal padding/alignment
+contract. These observations support a tested-configuration alignment model;
+they do not demonstrate a new native size-handling defect.
+
+rc5 replaces the rc4 allowance with a fixed maximum of 127 FF bytes: one
+128-byte alignment boundary minus one. It rejects 128 or more rather than
+automatically expanding the policy. All existing length/SOI/EOI/geometry and
+suffix protections remain; unpadded data remains byte-identical. The EOI remains
+anchored before the bounded FF suffix, never found by arbitrary first-marker
+search. No native, ABI or IPC change is needed; rc3 hashes are reverified.
+
+metadata.raw_length_mod_128 reports the raw length modulo 128.
+metadata.padding_matches_128_alignment is true only when the raw length is
+divisible by 128 and the stripped count equals (-public_length) modulo 128.
+These are diagnostics, not acceptance predicates: otherwise valid unaligned
+JPEGs remain accepted. Existing identity, timestamps, time code, byte-length
+and padding metadata retain their semantics. Still-preview/original validation
+is unchanged. Corrected live-view and separate cancellation gates remain pending.

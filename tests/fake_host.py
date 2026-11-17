@@ -666,7 +666,7 @@ def handle_request(out, request_id: int, meta: bytes, blob: bytes = b"") -> bool
             data = b"\xff\xd8broken\xff\xd9"
         elif BEHAVIOUR == "live_view_actual_geometry":
             data = synth_jpeg(number, size, 1024, 680)
-        elif BEHAVIOUR == "live_view_ff_padding":
+        elif BEHAVIOUR in ("live_view_ff_padding", "live_view_padded_wrong_ipc_count"):
             data = synth_jpeg(number, size, 1024, 680) + b"\xff" * 45
         info = _cabi.FrameInfoStruct(
             byte_length=len(data),
@@ -678,7 +678,8 @@ def handle_request(out, request_id: int, meta: bytes, blob: bytes = b"") -> bool
         )
         if BEHAVIOUR == "live_view_wrong_length":
             info.byte_length += 1
-        if BEHAVIOUR == "live_view_wrong_ipc_count":
+        if BEHAVIOUR in ("live_view_wrong_ipc_count",
+                         "live_view_padded_wrong_ipc_count"):
             respond(out, request_id, blob=data, count=len(data)+1, item_size=1,
                     tail=_ipc.as_bytes(info))
             return True

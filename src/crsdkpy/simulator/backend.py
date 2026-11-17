@@ -1048,7 +1048,9 @@ class SimulatedBackend(Backend):
             timestamp_ms=now,
             frame_number=session.live_view_frame_no,
             metadata={"byte_length": size, "raw_payload_length": size,
-                      "stripped_padding_bytes": 0, "geometry_source": "frame"},
+                      "stripped_padding_bytes": 0, "geometry_source": "frame",
+                      "raw_length_mod_128": size % 128,
+                      "padding_matches_128_alignment": size % 128 == 0},
         )
 
     # -- previews and content ---------------------------------------------
