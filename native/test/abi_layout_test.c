@@ -5,5 +5,5 @@ int main(void)
 {
     return sizeof(crsdkpy_event) != 40 ||
            sizeof(crsdkpy_event_boundary) != 16 ||
-           CRSDKPY_ABI_VERSION_MAJOR != 1 || CRSDKPY_ABI_VERSION_MINOR != 6;
+           CRSDKPY_ABI_VERSION_MAJOR != 1 || CRSDKPY_ABI_VERSION_MINOR != 7;
 }

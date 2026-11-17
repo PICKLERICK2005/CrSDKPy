@@ -54,7 +54,7 @@ extern "C" {
  * refused at load rather than at the first call into the part that is
  * missing. */
 #define CRSDKPY_ABI_VERSION_MAJOR 1
-#define CRSDKPY_ABI_VERSION_MINOR 6
+#define CRSDKPY_ABI_VERSION_MINOR 7
 
 /* ---- status codes ---------------------------------------------------- */
 #define CRSDKPY_OK                    0
@@ -324,7 +324,7 @@ typedef struct crsdkpy_event {
     int32_t  i0;             /* state / focus value / source */
     int32_t  i1;
     int32_t  i2;
-    int64_t  i3;             /* content id and other wide payloads */
+    int64_t  i3;             /* content id; TRANSFER request ID since ABI 1.7 */
 } crsdkpy_event;
 
 /* Callback enqueue watermark immediately before a vendor write/command.
@@ -399,6 +399,12 @@ CRSDKPY_API int32_t crsdkpy_take_transfer_path(uint64_t handle, char* out,
 CRSDKPY_API int32_t crsdkpy_start_content_download(
     uint64_t handle, uint32_t slot, uint32_t content_id, uint32_t file_id,
     const char* destination_utf8);
+
+/* ABI 1.7: callback filename must match the operation-unique destination.
+ * Transfer events carry operation_id in i3. Legacy entry point stays intact. */
+CRSDKPY_API int32_t crsdkpy_start_owned_content_download(
+    uint64_t handle, uint32_t slot, uint32_t content_id, uint32_t file_id,
+    const char* destination_utf8, uint64_t operation_id);
 
 /* Request documented cancellation of the active file transfer. Idempotent
  * when no transfer is active or it has already reached a terminal callback. */

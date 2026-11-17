@@ -452,6 +452,8 @@ def decode_event(
     from ..events import NativeEventInfo
 
     event = _decode_event(raw, timestamp_ms=timestamp_ms)
+    if isinstance(event, TransferEvent):
+        object.__setattr__(event, "_operation_id", int(raw.i3) or None)
     object.__setattr__(
         event,
         "native",
@@ -725,29 +727,60 @@ def decode_live_view_info(raw: _cabi.LiveViewInfoStruct) -> LiveViewInfo:
     )
 
 
+# Policy allowance, not a Sony-guaranteed maximum or an alignment claim.
+# Three A7 IV payloads match 128-byte FF alignment; cap at one boundary minus
+# one, without requiring alignment on other bodies or widening on future input.
+_LIVE_VIEW_MAX_FF_PADDING = 127
+
+
 def build_live_view_frame(
     data: bytes, info: _cabi.FrameInfoStruct, *, timestamp_ms: int
 ) -> LiveViewFrame:
-    """Wrap one frame.
-
-    Geometry is parsed from the frame when possible and falls back to what the
-    info call reported. Unlike a capture preview, an unreadable live-view frame
-    is not fatal: the stream is best-effort and the caller will get another.
-    """
-    parsed = jpeg_dimensions(data)
-    width, height = parsed if parsed else (int(info.width) or None,
-                                           int(info.height) or None)
+    """Validate one JPEG payload; image-info geometry is not JPEG evidence."""
+    raw_length = len(data)
+    # Validate the wire/native length before considering normalization.
+    if int(info.byte_length) != raw_length or not is_jpeg(data):
+        raise CameraConnectionError(
+            "invalid live-view JPEG raw payload length or SOI",
+            operation="get_live_view_frame",
+        )
+    end = raw_length
+    while end and data[end - 1] == 0xFF:
+        end -= 1
+        if raw_length - end > _LIVE_VIEW_MAX_FF_PADDING:
+            raise CameraConnectionError(
+                "invalid live-view JPEG: excessive trailing FF padding",
+                operation="get_live_view_frame",
+            )
+    padding = raw_length - end
+    # Anchor EOI immediately before the bounded suffix. Never search for an
+    # arbitrary first EOI or remove other bytes/header framing.
+    normalized = data[:end] if padding else data
+    parsed = jpeg_dimensions(normalized)
+    if not normalized.endswith(b"\xff\xd9") or parsed is None:
+        raise CameraConnectionError(
+            "invalid live-view JPEG payload (EOI or geometry); "
+            "refusing to label receive framing or truncated bytes as an image",
+            operation="get_live_view_frame",
+        )
+    width, height = parsed
     return LiveViewFrame(
-        data=data,
+        data=normalized,
         mime="image/jpeg",
         width=width,
         height=height,
         timestamp_ms=timestamp_ms,
         frame_number=int(info.frame_number),
         metadata={
-            "byte_length": len(data),
+            "byte_length": len(normalized),
+            "raw_payload_length": raw_length,
+            "stripped_padding_bytes": padding,
+            "raw_length_mod_128": raw_length % 128,
+            "padding_matches_128_alignment": (
+                raw_length % 128 == 0 and padding == (-len(normalized)) % 128
+            ),
             "time_code": int(info.time_code),
-            "geometry_source": "frame" if parsed else "info",
+            "geometry_source": "frame",
         },
     )
 
@@ -1369,6 +1402,17 @@ class NativeBackend(
         self._measurements.postview_delivered.add(session_id)
         data = bytes(bytearray(buffer[: size.value]))
         return build_postview(data, info, timestamp_ms=self._clock.now_ms())
+
+    supports_owned_downloads = True
+
+    def start_owned_content_download(self, session_id, content, destination,
+                                    operation_id):
+        handle = self._handle(session_id, "start_content_download")
+        self._require_content_mode(
+            session_id, "start_content_download", "original_transfer")
+        _cabi.check(self._lib, self._lib.crsdkpy_start_owned_content_download(
+            handle, int(content.slot), int(content.content_id), int(content.file_id),
+            destination.encode("utf-8"), int(operation_id)), "start_content_download")
 
     def start_content_download(
         self, session_id: str, content: ContentRef, destination: str

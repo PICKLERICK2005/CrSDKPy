@@ -11,6 +11,7 @@ Identifiers are monotonic but **not** contiguous. Detect new content with
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Sequence
 from os import PathLike
 from pathlib import Path
@@ -18,9 +19,9 @@ from typing import TYPE_CHECKING, Optional, Union
 
 from .capture import CapturedContent
 from .enums import PreviewKind
-from .errors import CameraBusyError, UnsupportedOperationError
+from .errors import CameraBusyError, CameraConnectionError, UnsupportedOperationError
 from .previews import Preview
-from .transfers import ContentDownload
+from .transfers import ContentDownload, _check_redirects
 
 if TYPE_CHECKING:  # pragma: no cover
     from .session import Session
@@ -34,6 +35,11 @@ class Content:
     def __init__(self, session: Session) -> None:
         self._session = session
         self._active_download: Optional[ContentDownload] = None
+        self._download_lock = threading.RLock()
+
+    def _session_closed(self):
+        if self._active_download is not None and not self._active_download.successful:
+            self._active_download._quarantine()
 
     @property
     def available(self) -> bool:
@@ -93,7 +99,14 @@ class Content:
         content_id = (
             content.content_id if isinstance(content, CapturedContent) else int(content)
         )
-        return session._backend.get_preview(session._id, content_id, kind)
+        preview = session._backend.get_preview(session._id, content_id, kind)
+        if preview.content_id is not None and preview.content_id != content_id:
+            raise CameraConnectionError(
+                f"the camera returned preview {preview.content_id}, not {content_id}; "
+                "refusing to present a stale image",
+                operation="content.preview",
+            )
+        return preview
 
     def download(
         self,
@@ -109,7 +122,15 @@ class Content:
         transfer may be active per session because Sony's completion callback
         does not carry a caller-defined request identifier.
         """
+        with self._download_lock:
+            return self._download(content, destination, overwrite=overwrite)
+
+    def _download(self, content, destination, *, overwrite):
         self._require("content.download")
+        if not self._session._backend.supports_owned_downloads:
+            raise UnsupportedOperationError(
+                "backend requires attributed downloads (native ABI 1.7 / IPC 1.4)",
+                capability="original_transfer_identity", operation="content.download")
         if self._active_download is not None and not self._active_download.finished:
             raise CameraBusyError(
                 "one original-file download is already active for this session",
@@ -123,14 +144,18 @@ class Content:
         if target.is_dir():
             if not content.filename:
                 raise ValueError("a directory destination requires content.filename")
+            if (content.filename in (".", "..")
+                    or Path(content.filename).name != content.filename):
+                raise ValueError("content filename is not a safe filename component")
             target = target / content.filename
-        if target.exists() and not overwrite:
+        if (target.exists() or target.is_symlink()) and not overwrite:
             raise FileExistsError(str(target))
+        _check_redirects(target.absolute())
         target.parent.mkdir(parents=True, exist_ok=True)
         session = self._session
-        operation = ContentDownload(session, content, target)
-        operation._start()
+        operation = ContentDownload(session, content, target, overwrite=overwrite)
         self._active_download = operation
+        operation._start()
         return operation
 
     def __iter__(self):

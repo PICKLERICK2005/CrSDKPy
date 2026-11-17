@@ -27,6 +27,7 @@ from .enums import (
 )
 from .errors import (
     AutofocusFailedError,
+    BackendError,
     CameraConnectionError,
     InvalidSessionStateError,
     OperationTimeoutError,
@@ -230,14 +231,24 @@ class Session:
             return
         self._closed = True
         self._state = ConnectionState.CLOSED
-        self._backend.close_session(self._id)
-        self._camera._forget_session(self)
+        try:
+            self._backend.close_session(self._id)
+        finally:
+            self.content._session_closed()
+            self._camera._forget_session(self)
 
     def __enter__(self) -> Session:
         return self
 
     def __exit__(self, *exc_info: object) -> None:
-        self.close()
+        try:
+            self.close()
+        except Exception as cleanup:
+            primary = exc_info[1] if len(exc_info) > 1 else None
+            if primary is None:
+                raise
+            primary.lifecycle_cleanup_errors = (
+                *getattr(primary, "lifecycle_cleanup_errors", ()), cleanup)
 
     def _check_usable(self, operation: str) -> None:
         if self._closed:
@@ -455,7 +466,9 @@ class Session:
                     return False
                 clock.sleep_ms(50)
         except UnsupportedOperationError:
-            return True  # no such stage on this camera
+            # A temporary property restriction on an S1-capable body is not
+            # evidence that focus control was released.
+            return not self.capabilities.autofocus_s1
 
     def _focus_gate(self, *, timeout_ms: int) -> FocusResult:
         """Engage the half-press stage and wait for an accepted focus state.
@@ -588,6 +601,42 @@ class Session:
         )
 
     # -- capture -----------------------------------------------------------
+    def _capture_failure(self, capture, primary, *, cleanup=False,
+                         cleanup_started=False):
+        """Keep primary error and confirmed exposure evidence; never retry S2."""
+        confirmed, secondary = None, None
+        if cleanup_started:
+            confirmed = False  # primary already is the cleanup error
+        elif cleanup:
+            try:
+                confirmed = self._release_half_press()
+                if not confirmed:
+                    secondary = BackendError("control cleanup could not be confirmed")
+            except BaseException as error:
+                confirmed, secondary = False, error
+        capture._fail("capture failed after possible release; exposure outcome unknown"
+                      if capture._exposure_requested and not capture.exposed
+                      else "capture failed after confirmed exposure" if capture.exposed
+                      else "capture failed before release request")
+        error = primary
+        if capture._exposure_requested and isinstance(primary, AutofocusFailedError):
+            # This type promises no shutter attempt. Never let a late backend
+            # status error masquerade as an explicit pre-release focus refusal.
+            error = BackendError("autofocus error after possible shutter release",
+                                 operation="capture")
+        error.capture = capture
+        error.exposure_requested = capture._exposure_requested
+        error.exposure_confirmed = capture.exposed
+        error.release_command_completed = capture._release_command_completed
+        error.focus_cleanup_confirmed = confirmed
+        # S1 readback does not prove S2 state or physical actuation. No extra
+        # shutter command/status operation is issued to manufacture certainty.
+        error.control_cleanup_confirmed = (
+            confirmed if not capture._exposure_requested or confirmed is False
+            else None)
+        error.cleanup_error = secondary
+        return error
+
     def capture(
         self,
         *,
@@ -617,13 +666,20 @@ class Session:
         self._op_events = deque(
             event for event in self._op_events if not isinstance(event, CaptureEvent)
         )
-        self._backend.send_command(self._id, Command.RELEASE, CommandParameter.DOWN)
-        capture._exposure_boundary = self._operation_boundary("command", 0)
-        clock.sleep_ms(dwell_ms)
-        self._backend.send_command(self._id, Command.RELEASE, CommandParameter.UP)
-
-        if wait_for_exposure:
-            self._await_exposure(capture, timeout_ms=timeout_ms)
+        try:
+            capture._exposure_requested = True
+            self._backend.send_command(self._id, Command.RELEASE, CommandParameter.DOWN)
+            capture._exposure_boundary = self._operation_boundary("command", 0)
+            clock.sleep_ms(dwell_ms)
+            self._backend.send_command(self._id, Command.RELEASE, CommandParameter.UP)
+            capture._release_command_completed = True
+            if wait_for_exposure:
+                self._await_exposure(capture, timeout_ms=timeout_ms)
+        except BaseException as primary:
+            error = self._capture_failure(capture, primary)
+            if error is primary:
+                raise
+            raise error from primary
         return capture
 
     def autofocus_and_capture(
@@ -686,14 +742,25 @@ class Session:
         self._op_events = deque(
             event for event in self._op_events if not isinstance(event, CaptureEvent)
         )
-        self._backend.send_command(self._id, Command.RELEASE, CommandParameter.DOWN)
-        capture._exposure_boundary = self._operation_boundary("command", 0)
-        clock.sleep_ms(dwell_ms)
-        self._backend.send_command(self._id, Command.RELEASE, CommandParameter.UP)
-
-        self._await_exposure(capture, timeout_ms=timeout_ms)
-        # Verify rather than assume the release cleared the half-press stage.
-        self._release_half_press()
+        cleanup_started = False
+        try:
+            capture._exposure_requested = True
+            self._backend.send_command(self._id, Command.RELEASE, CommandParameter.DOWN)
+            capture._exposure_boundary = self._operation_boundary("command", 0)
+            clock.sleep_ms(dwell_ms)
+            self._backend.send_command(self._id, Command.RELEASE, CommandParameter.UP)
+            capture._release_command_completed = True
+            self._await_exposure(capture, timeout_ms=timeout_ms)
+            cleanup_started = True
+            if not self._release_half_press():
+                raise BackendError("control cleanup could not be confirmed",
+                                   operation="autofocus_and_capture")
+        except BaseException as primary:
+            error = self._capture_failure(capture, primary, cleanup=True,
+                                          cleanup_started=cleanup_started)
+            if error is primary:
+                raise
+            raise error from primary
         return capture
 
     def _await_exposure(self, capture: Capture, *, timeout_ms: int) -> None:

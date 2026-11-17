@@ -1047,6 +1047,10 @@ class SimulatedBackend(Backend):
             height=lv.height,
             timestamp_ms=now,
             frame_number=session.live_view_frame_no,
+            metadata={"byte_length": size, "raw_payload_length": size,
+                      "stripped_padding_bytes": 0, "geometry_source": "frame",
+                      "raw_length_mod_128": size % 128,
+                      "padding_matches_128_alignment": size % 128 == 0},
         )
 
     # -- previews and content ---------------------------------------------
@@ -1064,6 +1068,14 @@ class SimulatedBackend(Backend):
                 operation="configure_postview",
             )
         session.postview_configured = bool(enabled)
+
+    supports_owned_downloads = True
+
+    def start_owned_content_download(self, session_id, content, destination,
+                                    operation_id):
+        session = self._live_session(session_id, "start_content_download")
+        session.download_id = operation_id
+        self.start_content_download(session_id, content, destination)
 
     def take_transfer_path(self, session_id: str) -> Optional[str]:
         session = self._live_session(session_id, "take_transfer_path")
@@ -1092,13 +1104,18 @@ class SimulatedBackend(Backend):
         session.transfer_canceled = False
         session.transfer_path = None
         started = self._clock.now_ms()
+        operation_id = getattr(session, "download_id", None)
+
+        def owned(event):
+            object.__setattr__(event, "_operation_id", operation_id)
+            return event
         session.emit(
             started + 1,
-            TransferEvent(
+            owned(TransferEvent(
                 timestamp_ms=started + 1,
                 outcome=TransferOutcome.IN_PROGRESS,
                 percent=0,
-            ),
+            )),
         )
 
         def _finish() -> Sequence[Event]:
@@ -1118,12 +1135,12 @@ class SimulatedBackend(Backend):
                 target.write_bytes(b"II*\x00" + bytes(max(0, size - 4)))
                 session.transfer_path = str(target)
             return (
-                TransferEvent(
+                owned(TransferEvent(
                     timestamp_ms=self._clock.now_ms(),
                     outcome=outcome,
                     percent=100 if outcome is TransferOutcome.OK else 50,
                     has_path=outcome is TransferOutcome.OK,
-                ),
+                )),
             )
 
         session.schedule(started + session.scenario.transfer_delay_ms, _finish)

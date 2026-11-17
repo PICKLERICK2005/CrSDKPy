@@ -143,17 +143,36 @@ class SDK:
         """
         if not self._started:
             return
+        error = None
         for camera in self._cameras:
-            camera.close_sessions()
+            try:
+                camera.close_sessions()
+            except Exception as exc:
+                if error is None:
+                    error = exc
+        try:
+            self._backend.shutdown()
+        except Exception as exc:
+            if error is not None:
+                raise exc from error
+            raise
         self._cameras.clear()
-        self._backend.shutdown()
         self._started = False
+        if error is not None:
+            raise error
 
     def __enter__(self) -> SDK:
         return self.start()
 
     def __exit__(self, *exc_info: object) -> None:
-        self.close()
+        try:
+            self.close()
+        except Exception as cleanup:
+            primary = exc_info[1] if len(exc_info) > 1 else None
+            if primary is None:
+                raise
+            primary.lifecycle_cleanup_errors = (
+                *getattr(primary, "lifecycle_cleanup_errors", ()), cleanup)
 
     # -- discovery ---------------------------------------------------------
     def discover(self) -> list[Camera]:
@@ -174,8 +193,11 @@ class SDK:
             camera = existing.get(info.device_key)
             if camera is None:
                 camera = Camera(self._backend, info)
+                existing[info.device_key] = camera
+                self._cameras.append(camera)
             cameras.append(camera)
-        self._cameras = cameras
+        # Discovery is a visibility snapshot, not ownership transfer. Keep
+        # missing cameras registered so their sessions still close with SDK.
         return list(cameras)
 
     def camera_by_key(self, device_key: str) -> Optional[Camera]:

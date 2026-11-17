@@ -2,6 +2,88 @@
 
 Dates are the day the change was validated, not the day it was released.
 
+## 0.1.0rc5 — unreleased
+
+- Bound live-view FF suffix normalization at 127 bytes, matching the maximum
+  padding for the observed 128-byte alignment pattern. Three retained A7 IV
+  payloads had 45/49/72-byte suffixes; all raw lengths and rounding relationships
+  matched. This is measured configuration evidence, not a universal Sony contract.
+- Add raw_length_mod_128 and padding_matches_128_alignment diagnostics without
+  requiring alignment on other bodies. Preserve raw/public lengths and strict
+  SOI, terminal EOI, suffix, geometry and length validation. Reject 128+ padding.
+- All three private normalized JPEGs fully decoded offline with independent GDI+;
+  this does not establish new live-view hardware acceptance or camera-original
+  cryptographic equality. Native ABI 1.7 / IPC 1.4 binaries remain unchanged.
+
+## 0.1.0rc4 — development candidate
+
+- Normalize live-view JPEGs with at most 64 trailing FF bytes after terminal
+  EOI, retaining raw payload length and stripped-padding count in metadata.
+  Check wire/native length and SOI before normalization; reject other suffixes,
+  excessive padding, missing EOI and unreadable geometry. Still previews unchanged.
+- A7 IV rc3 returned a JPEG at offset zero with 45 trailing FF bytes, but its
+  strict terminal-EOI validator rejected it. rc4's 64-byte allowance is a bounded
+  application policy, not a Sony maximum or an inferred alignment guarantee.
+- Keep ABI 1.7 / IPC 1.4 and rc3 native binaries unchanged. Corrected rc4
+  live-view acceptance and separate cancellation acceptance remain pending.
+
+## 0.1.0rc3 — development candidate
+
+- Copy live-view JPEG bytes from Sony's GetImageData()/GetImageSize() rather
+  than the receive allocation prefix. Validate the returned pointer and complete
+  range; use overlap-safe copying and reject inconsistent sizes without truncation.
+- Treat Frame_NotUpdated as no new frame and report insufficient receive buffers
+  explicitly. Preserve frame number/time-code metadata and ABI 1.7 / IPC 1.4 layouts.
+- Reject malformed/truncated live-view JPEGs and inconsistent hosted frame lengths.
+  Derive displayed geometry from the JPEG, not fallback image-info dimensions.
+- Add camera-free native offset/overlap/bounds and hosted JPEG regressions.
+  The A7 IV rc2 failed frame is preserved; rc3 physical revalidation is pending.
+  Original-download acceptance remains within its recorded rc1 scope.
+
+## 0.1.0rc2 — development candidate
+
+- Refuse Windows original downloads whose complete generated staging path exceeds
+  a conservative 239 UTF-16-unit budget, before starting any backend transfer.
+  Clean up empty staging allocations on refusal and recommend a shorter host
+  directory. This is a safety policy, not a universal Sony path-length maximum.
+- A7 IV rc1 hardware acceptance verified exact thumbnail/screennail identity and
+  one existing 35,160,064-byte ARW download, attributed progress/OK events,
+  validated publication and clean shutdown. A 124-unit staging path succeeded;
+  a 265-unit path failed with File_CantOpen. Source-side SHA256 equality was not
+  independently established. Live view and cancellation remain pending.
+- Native ABI 1.7 / IPC 1.4 are unchanged from rc1. No new camera commands,
+  capture sequencing changes or automatic transfer retries.
+
+## 0.1.0rc1 — development candidate
+
+- Close backend sessions when initial session construction fails; retain known
+  cameras across discovery snapshots so SDK shutdown still owns their sessions.
+- Continue closing remaining sessions and attempt backend shutdown after a close
+  error, while reporting failures instead of claiming successful cleanup.
+- Fail transfer waits promptly when the session is closed or unusable, and
+  record cancellation only after the backend accepts it.
+- Reject mismatched content identities in direct content-preview requests, using
+  the same conservative policy as capture previews.
+- Add standalone native ABI/IPC/counted-string contract builds without Sony's
+  runtime, with Windows/Linux CI coverage configured.
+- Stage original downloads privately; validate owned completion, path, regular
+  file identity and known size before exclusive publication or atomic overwrite.
+  Preserve old destinations on failed transfers and quarantine uncertain writers.
+- Bind native file callbacks to operation-unique filenames before attaching request
+  IDs. Add ABI 1.7 / IPC 1.4 owned-download entry points without widening fixed
+  structs; retain legacy entry points. Development clients reject older peers.
+- Preserve primary post-release errors and exposure evidence, attempt existing S1
+  cleanup for gated captures, and report cleanup uncertainty without any S2 retry.
+- Serialize cancellation against the next download, retain ownership through
+  publication, and preserve primary errors across context-manager close failures.
+- Match callback names exactly, with Windows-only separator normalization and
+  no case/Unicode folding; reject truncated, foreign and late request names.
+
+These are development changes, not a stable release or new hardware acceptance.
+The candidate is not 0.1.0 final; remaining gates are listed in
+`docs/STABLE_RELEASE_READINESS.md`. The accepted b4 ABI 1.6 / IPC 1.3 artifacts stay
+unchanged. This source needs a rebuilt ABI 1.7 / IPC 1.4 pair. Capture dwell stays 35 ms.
+
 ## 0.1.0b4 — 2026-11-11
 
 ### Fixed

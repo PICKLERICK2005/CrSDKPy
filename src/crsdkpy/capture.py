@@ -84,6 +84,8 @@ class Capture:
         self.focus: Optional[FocusResult] = None
         self.content: Optional[CapturedContent] = None
         self.failure: Optional[str] = None
+        self._exposure_requested = False
+        self._release_command_completed = False
         self._previews: dict[PreviewKind, Preview] = {}
         #: Newest content id before this capture, or ``None`` when the session
         #: has no content index. New content is anything strictly greater.

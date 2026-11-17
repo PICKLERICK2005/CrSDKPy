@@ -55,7 +55,7 @@ __all__ = [
 ]
 
 ABI_VERSION_MAJOR = 1
-ABI_VERSION_MINOR = 6
+ABI_VERSION_MINOR = 7
 
 #: Environment variable holding an explicit path to the built bridge.
 LIBRARY_ENV_VAR = "CRSDKPY_BRIDGE"
@@ -435,6 +435,10 @@ def _declare(lib: ctypes.CDLL) -> None:
     lib.crsdkpy_start_content_download.restype = c_int32
     lib.crsdkpy_start_content_download.argtypes = [
         c_uint64, c_uint32, c_uint32, c_uint32, c_char_p
+    ]
+    lib.crsdkpy_start_owned_content_download.restype = c_int32
+    lib.crsdkpy_start_owned_content_download.argtypes = [
+        c_uint64, c_uint32, c_uint32, c_uint32, c_char_p, c_uint64
     ]
 
     lib.crsdkpy_cancel_content_download.restype = c_int32

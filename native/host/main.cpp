@@ -184,7 +184,8 @@ void dispatch(const crsdkpy_ipc_request& request,
     case CRSDKPY_OP_PING:
         return;
 
-    case CRSDKPY_OP_START_CONTENT_DOWNLOAD: {
+    case CRSDKPY_OP_START_CONTENT_DOWNLOAD:
+    case CRSDKPY_OP_START_OWNED_CONTENT_DOWNLOAD: {
         if (blob_in.empty() ||
             std::find(blob_in.begin(), blob_in.end(), '\0') != blob_in.end()) {
             fill(response, CRSDKPY_ERR_INVALID_ARG, CRSDKPY_CAT_INVALID_ARG,
@@ -192,9 +193,18 @@ void dispatch(const crsdkpy_ipc_request& request,
             return;
         }
         const std::string destination(blob_in.begin(), blob_in.end());
-        const int32_t status = crsdkpy_start_content_download(
-            request.handle, content.slot, content.content_id, content.file_id,
-            destination.c_str());
+        const uint64_t operation_id = request.op == CRSDKPY_OP_START_OWNED_CONTENT_DOWNLOAD
+            ? uint64_t(content.reserved) | (uint64_t(content.reserved2) << 32) : 0;
+        if (request.op == CRSDKPY_OP_START_OWNED_CONTENT_DOWNLOAD && !operation_id) {
+            fill(response, CRSDKPY_ERR_INVALID_ARG, CRSDKPY_CAT_INVALID_ARG,
+                 "owned download requires an operation identity");
+            return;
+        }
+        const int32_t status = request.op == CRSDKPY_OP_START_CONTENT_DOWNLOAD
+            ? crsdkpy_start_content_download(request.handle, content.slot,
+                content.content_id, content.file_id, destination.c_str())
+            : crsdkpy_start_owned_content_download(request.handle, content.slot,
+                content.content_id, content.file_id, destination.c_str(), operation_id);
         fill(response, status, categorise(status), "");
         if (status != CRSDKPY_OK) attach_bridge_error(response);
         return;

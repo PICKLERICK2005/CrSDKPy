@@ -149,6 +149,8 @@ class TransferEvent(Event):
     #: The vendor's own notification code, preserved even when recognised.
     notify_code: Optional[int] = None
     has_path: bool = False
+    _operation_id: Optional[int] = field(
+        default=None, init=False, repr=False, compare=False)
 
     def __bool__(self) -> bool:
         return self.outcome is TransferOutcome.OK

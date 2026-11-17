@@ -47,6 +47,53 @@ CRSDK 2.02.00, Windows USB hosted backend; native ABI 1.6 / IPC 1.3.
 See [A7 IV validation](A7IV_VALIDATION.md) for exact scope and provenance limits.
 The five-frame sample establishes this acceptance gate, not universal reliability.
 
+## A7 IV original-transfer validation — 0.1.0rc1
+
+Windows USB hosted backend, ABI 1.7 / IPC 1.4. One existing ARW was selected
+by slot/content/file identity. Thumbnail (160×120) and screennail (1616×1080)
+matched that identity. One original download reported attributed progress at
+47% and 95%, then terminal OK at 100%. The published file matched the reported
+35,160,064-byte size and passed TIFF/ARW structure and image-extent parsing.
+Private staging was finalized; session and host shutdown were clean.
+
+Local SHA256 was recorded, but independent camera-source cryptographic equality
+is unproven; full RAW pixel decompression was not performed. Raw callback filename
+text is not exposed; native matched-path/request-ID evidence was retained.
+A 124-UTF-16-unit staging path succeeded where an earlier 265-unit path failed
+with File_CantOpen. Initial enumeration may report 0x8D05 while indexing; no
+automatic transfer retry is implied. Live view and original cancellation on this
+candidate remain unvalidated. This does not revalidate rc1 physical capture.
+
+rc2 adds a software-tested Windows complete-staging-path preflight budget of
+239 UTF-16 units; it does not change the accepted short-path transfer sequence.
+
+## A7 IV live-view candidate status — 0.1.0rc3
+
+The rc2 live-view gate failed JPEG payload validation; its evidence is retained.
+rc3 corrects native image-pointer extraction and validates JPEG/IPC lengths in
+software. No corrected rc3 live-view hardware pass is claimed yet. See
+[live-view payload ownership](LIVE_VIEW_PAYLOAD.md). The separately accepted
+rc1 original download and historical b4 capture evidence retain their scopes.
+
+## A7 IV live-view candidate status — 0.1.0rc4
+
+rc3 returned a JPEG beginning at byte zero, with parsed 1024×680 geometry and
+45 trailing FF bytes after EOI. Its terminal-EOI validator rejected the payload,
+so no public LiveViewFrame acceptance was established. rc4 adds a bounded
+live-view-only allowance of at most 64 FF suffix bytes, preserving raw-length
+and padding metadata. This is software-tested, not yet hardware-validated.
+Native ABI 1.7 / IPC 1.4 binaries remain unchanged from rc3. The earlier reports
+and original-download acceptance retain their documented scopes.
+
+## A7 IV live-view candidate status — 0.1.0rc5
+
+rc4 returned one validated public frame, then rejected a second with 72 FF suffix
+bytes. Three retained payloads match 128-byte FF alignment; all normalized JPEGs
+fully decoded offline at 1024×680. rc5 allows at most 127 FF suffix bytes and
+records alignment diagnostics without universally requiring alignment. This is
+software/private-fixture validation, not a new hardware pass. Native binaries
+remain unchanged; prior acceptance and failed reports retain their scopes.
+
 ## Matrix
 
 The following matrix and its footnotes describe the **FX3A reference body**.

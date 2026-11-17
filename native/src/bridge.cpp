@@ -14,6 +14,8 @@
 
 #include "crsdkpy_abi.h"
 #include "sony_counted_string.h"
+#include "download_identity.h"
+#include "live_view_payload.h"
 
 #include <atomic>
 #include <chrono>
@@ -557,7 +559,7 @@ public:
                 file_transfer_active_ = false;
                 file_transfer_terminal_ = true;
                 push(CRSDKPY_EVENT_TRANSFER, 0, 0,
-                     CRSDKPY_TRANSFER_STOPPED, 0, 0);
+                     CRSDKPY_TRANSFER_STOPPED, 0, file_transfer_id_);
             }
         }
         transfer_condition_.notify_all();
@@ -748,27 +750,40 @@ public:
     void on_transfer_file_result(int32_t outcome, uint32_t notify,
                                  uint32_t percent, const std::string& path)
     {
+        uint64_t operation_id = 0;
         {
             std::lock_guard<std::mutex> lock(transfer_mutex_);
             if (!file_transfer_active_ || file_transfer_terminal_) return;
-            if (!path.empty()) transfer_path_ = path;
+            operation_id = file_transfer_id_;
+            if (operation_id && !crsdkpy::download_callback_matches(
+                    operation_id, file_transfer_expected_, path)) {
+                // Retain raw notification evidence without attributing it or
+                // replacing the active transfer's path/terminal state.
+                push(CRSDKPY_EVENT_TRANSFER, notify, static_cast<int32_t>(percent),
+                     outcome, 0, 0);
+                return;
+            }
+            if (!path.empty()) transfer_path_ = operation_id
+                ? file_transfer_expected_ : path;
             if (outcome != CRSDKPY_TRANSFER_IN_PROGRESS) {
                 file_transfer_terminal_ = true;
                 file_transfer_active_ = false;
             }
         }
         push(CRSDKPY_EVENT_TRANSFER, notify, static_cast<int32_t>(percent),
-             outcome, path.empty() ? 0 : 1, 0);
+             outcome, path.empty() ? 0 : 1, operation_id);
         transfer_condition_.notify_all();
     }
 
-    bool begin_file_transfer()
+    bool begin_file_transfer(uint64_t operation_id, const std::string& expected)
     {
         std::lock_guard<std::mutex> lock(transfer_mutex_);
         if (file_transfer_active_) return false;
         file_transfer_active_ = true;
         file_transfer_terminal_ = false;
         transfer_path_.clear();
+        file_transfer_id_ = operation_id;
+        file_transfer_expected_ = expected;
         return true;
     }
 
@@ -920,6 +935,8 @@ private:
     std::string transfer_path_;
     bool file_transfer_active_ = false;
     bool file_transfer_terminal_ = false;
+    uint64_t file_transfer_id_ = 0;
+    std::string file_transfer_expected_;
 
     std::mutex lens_mutex_;
     std::vector<crsdkpy_lens_info> lens_info_;
@@ -2103,14 +2120,41 @@ int32_t crsdkpy_pull_postview(uint64_t handle, crsdkpy_postview_info* out_info)
     return CRSDKPY_OK;
 }
 
+static int32_t start_content_download_impl(uint64_t, uint32_t, uint32_t,
+                                          uint32_t, const char*, uint64_t);
+
 int32_t crsdkpy_start_content_download(uint64_t handle, uint32_t slot,
                                       uint32_t content_id, uint32_t file_id,
                                       const char* destination_utf8)
+{
+    return start_content_download_impl(
+        handle, slot, content_id, file_id, destination_utf8, 0);
+}
+
+int32_t crsdkpy_start_owned_content_download(uint64_t handle, uint32_t slot,
+                                      uint32_t content_id, uint32_t file_id,
+                                      const char* destination_utf8,
+                                      uint64_t operation_id)
+{
+    if (!operation_id) {
+        set_error("owned download requires a nonzero identity");
+        return CRSDKPY_ERR_INVALID_ARG;
+    }
+    return start_content_download_impl(
+        handle, slot, content_id, file_id, destination_utf8, operation_id);
+}
+
+static int32_t start_content_download_impl(uint64_t handle, uint32_t slot,
+                                      uint32_t content_id, uint32_t file_id,
+                                      const char* destination_utf8,
+                                      uint64_t operation_id)
 {
     set_error("");
     if (!destination_utf8 || !*destination_utf8 || !content_id || !file_id) {
         return CRSDKPY_ERR_INVALID_ARG;
     }
+    if (operation_id && !crsdkpy::download_identity_valid(
+            operation_id, destination_utf8)) return CRSDKPY_ERR_INVALID_ARG;
     if (slot == 0) slot = CRSDKPY_SLOT_1;
     std::shared_ptr<Session> session;
     {
@@ -2123,7 +2167,7 @@ int32_t crsdkpy_start_content_download(uint64_t handle, uint32_t slot,
         set_error("original-file download requires RemoteTransfer control mode");
         return CRSDKPY_ERR_UNSUPPORTED;
     }
-    if (!session->begin_file_transfer()) {
+    if (!session->begin_file_transfer(operation_id, destination_utf8)) {
         set_error("an original-file transfer is already active for this session");
         return CRSDKPY_ERR_BUSY;
     }
@@ -2304,26 +2348,31 @@ int32_t crsdkpy_get_live_view_frame(uint64_t handle, uint8_t* out,
     if (capacity == 0) return CRSDKPY_OK;  // sizing call
     if (capacity < needed) return CRSDKPY_ERR_BUFFER_TOO_SMALL;
 
-    // The vendor writes into the caller's buffer, so no vendor-owned
-    // allocation exists at any point and nothing needs copying out of one.
+    // Sony's receive allocation includes framing. GetImageData(), not its
+    // allocation base, identifies the image body. Keep both block and backing
+    // storage alive through the checked copy; never guess a header length.
+    std::vector<uint8_t> receive(needed);
     SDK::CrImageDataBlock block;
     block.SetSize(needed);
-    block.SetData(out);
+    block.SetData(receive.data());
     error = SDK::GetLiveViewImage(session->handle(), &block);
+    if (error == SDK::CrWarning_Frame_NotUpdated) {
+        out_info->byte_length = 0;
+        return CRSDKPY_ERR_NOT_FOUND;
+    }
+    if (error == SDK::CrError_Memory_Insufficient) {
+        set_error("the live-view receive allocation was insufficient; frame not copied");
+        return CRSDKPY_ERR_BUFFER_TOO_SMALL;
+    }
     if (error != SDK::CrError_None) {
         set_error("the camera did not return a live-view frame");
         return static_cast<int32_t>(error);
     }
-    const uint32_t produced = block.GetImageSize();
-    if (produced == 0) {
-        // Nothing new. Ordinary around an exposure; the stream resumes.
-        return CRSDKPY_ERR_NOT_FOUND;
-    }
-    out_info->byte_length = produced > needed ? needed : produced;
-    out_info->frame_number = block.GetFrameNo();
-    out_info->time_code = block.GetTimeCode();
-    out_info->fetched_ms = now_ms();
-    return CRSDKPY_OK;
+    const int32_t status = crsdkpy::copy_live_view_payload(
+        receive.data(), needed, block, out, capacity, out_info, now_ms());
+    if (status == CRSDKPY_ERR_INVALID_ARG)
+        set_error("the live-view image pointer/size is outside its receive allocation");
+    return status;
 }
 
 int32_t crsdkpy_take_content_preview(uint64_t handle, uint8_t* out,
