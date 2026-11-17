@@ -47,6 +47,26 @@ CRSDK 2.02.00, Windows USB hosted backend; native ABI 1.6 / IPC 1.3.
 See [A7 IV validation](A7IV_VALIDATION.md) for exact scope and provenance limits.
 The five-frame sample establishes this acceptance gate, not universal reliability.
 
+## A7 IV original-transfer validation — 0.1.0rc1
+
+Windows USB hosted backend, ABI 1.7 / IPC 1.4. One existing ARW was selected
+by slot/content/file identity. Thumbnail (160×120) and screennail (1616×1080)
+matched that identity. One original download reported attributed progress at
+47% and 95%, then terminal OK at 100%. The published file matched the reported
+35,160,064-byte size and passed TIFF/ARW structure and image-extent parsing.
+Private staging was finalized; session and host shutdown were clean.
+
+Local SHA256 was recorded, but independent camera-source cryptographic equality
+is unproven; full RAW pixel decompression was not performed. Raw callback filename
+text is not exposed; native matched-path/request-ID evidence was retained.
+A 124-UTF-16-unit staging path succeeded where an earlier 265-unit path failed
+with File_CantOpen. Initial enumeration may report 0x8D05 while indexing; no
+automatic transfer retry is implied. Live view and original cancellation on this
+candidate remain unvalidated. This does not revalidate rc1 physical capture.
+
+rc2 adds a software-tested Windows complete-staging-path preflight budget of
+239 UTF-16 units; it does not change the accepted short-path transfer sequence.
+
 ## Matrix
 
 The following matrix and its footnotes describe the **FX3A reference body**.

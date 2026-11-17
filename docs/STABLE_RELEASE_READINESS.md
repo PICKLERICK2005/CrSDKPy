@@ -1,7 +1,7 @@
 # 0.1.0 stable readiness
 
 Target: 0.1.0 final. This is a development review, not release authorization.
-The unpublished hardware-gate candidate is 0.1.0rc1, not 0.1.0 final.
+The corrected unpublished candidate is 0.1.0rc2, not 0.1.0 final.
 The starting reference is main at 3cd1ec002b78f4fe944bf4594bf20876ce1678bf.
 Published 0.1.0b4, its artifacts and accepted ABI 1.6 / IPC 1.3 pair remain
 unchanged. No new camera validation is claimed.
@@ -61,9 +61,12 @@ with its cause after a possible release, so it cannot promise no exposure.
    configured jobs and local Windows tests alone do not establish that execution.
 2. Freeze a reviewed final source/artifact pair and rebuilt host/bridge. No
    accepted environment is upgraded merely by preparing development binaries.
-3. Separately authorize bounded A7 IV acceptance of the new owned download path,
-   callback filename format, cancellation/quarantine, previews and shutdown.
-   Existing b4 AF-S/MF acceptance is retained, not relabelled as this build's gate.
+3. rc1 A7 IV exact previews, one short-path original transfer, publication and
+   shutdown have passed. Local hashing did not establish independent source-side
+   cryptographic equality. rc2 only adds a Windows UTF-16 staging-path refusal;
+   the successful transfer sequence is unchanged. Separately authorize bounded
+   live-view and existing-original cancellation/quarantine checks. Existing b4
+   AF-S/MF acceptance is retained, not relabelled as this build's capture gate.
 
 ## Important nonblocking findings and explicit limits
 

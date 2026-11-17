@@ -2,7 +2,21 @@
 
 Dates are the day the change was validated, not the day it was released.
 
-## 0.1.0rc1 — unreleased
+## 0.1.0rc2 — unreleased
+
+- Refuse Windows original downloads whose complete generated staging path exceeds
+  a conservative 239 UTF-16-unit budget, before starting any backend transfer.
+  Clean up empty staging allocations on refusal and recommend a shorter host
+  directory. This is a safety policy, not a universal Sony path-length maximum.
+- A7 IV rc1 hardware acceptance verified exact thumbnail/screennail identity and
+  one existing 35,160,064-byte ARW download, attributed progress/OK events,
+  validated publication and clean shutdown. A 124-unit staging path succeeded;
+  a 265-unit path failed with File_CantOpen. Source-side SHA256 equality was not
+  independently established. Live view and cancellation remain pending.
+- Native ABI 1.7 / IPC 1.4 are unchanged from rc1. No new camera commands,
+  capture sequencing changes or automatic transfer retries.
+
+## 0.1.0rc1 — development candidate
 
 - Close backend sessions when initial session construction fails; retain known
   cameras across discovery snapshots so SDK shutdown still owns their sessions.

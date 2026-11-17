@@ -1,6 +1,21 @@
 # Original download safety — development contract
 
-Unpublished candidate: 0.1.0rc1. This does not authorize 0.1.0 final or deployment.
+Unpublished candidate: 0.1.0rc2. This does not authorize 0.1.0 final or deployment.
+
+On Windows the COMPLETE generated staging path must be at most 239 UTF-16
+code units, excluding its terminating NUL. Non-BMP characters count as two.
+This conservative library policy is not a universal Sony maximum. An A7 IV
+rc1 transfer succeeded at 124 units and failed at 265 with File_CantOpen; a
+native host-manifest probe also failed on the long path. Long-path registry
+settings alone do not establish vendor support.
+
+The randomized staging directory is allocated next to the final destination,
+then the actual complete path is checked before any backend transfer starts.
+A refusal raises ValueError with a shorter-directory recommendation and removes
+the empty allocation. Cleanup failure is attached as preflight_cleanup_error,
+with staging_path identifying the empty directory; it is not an active-writer
+quarantine. Nothing is silently relocated to another filesystem. No-overwrite,
+atomic publication and uncertain-writer quarantine behavior are unchanged.
 
 The public download(content, destination, overwrite=False), cancel() and wait()
 interfaces are retained. Destination can be a file or existing directory.

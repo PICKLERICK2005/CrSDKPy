@@ -22,6 +22,22 @@ if TYPE_CHECKING:
 
 __all__ = ["ContentDownload"]
 _ids = itertools.count(1)
+_WINDOWS_DOWNLOAD_PATHS = os.name == "nt"
+# Conservative policy, not a claimed universal Sony/Win32 maximum.
+_WINDOWS_DOWNLOAD_PATH_LIMIT = 239
+
+
+def _validate_download_path(path):
+    if not _WINDOWS_DOWNLOAD_PATHS:
+        return
+    units = len(os.fspath(path).encode("utf-16-le")) // 2
+    if units > _WINDOWS_DOWNLOAD_PATH_LIMIT:
+        raise ValueError(
+            f"Sony original transfer needs a shorter destination directory: "
+            f"the complete generated staging path is {units} UTF-16 units; "
+            f"the Windows safety budget is {_WINDOWS_DOWNLOAD_PATH_LIMIT}. "
+            "Choose a shorter host directory; no transfer was started."
+        )
 
 
 def _check_redirects(path):
@@ -60,6 +76,17 @@ class ContentDownload:
         self._staging_path = self._staging_dir / (
             f"{self._operation_id:016x}-{uuid.uuid4().hex}" + self._target.suffix
         )
+        try:
+            _validate_download_path(self._staging_path)
+        except ValueError as error:
+            # No backend call has occurred. Only remove our empty allocation;
+            # never apply the uncertain-writer quarantine policy to a refusal.
+            try:
+                self._staging_dir.rmdir()
+            except OSError as cleanup_error:
+                error.preflight_cleanup_error = cleanup_error
+                error.staging_path = self._staging_dir
+            raise
         self.outcome: Optional[TransferOutcome] = None
         self.percent = 0
         self.backend_code: Optional[int] = None
